@@ -1,4 +1,5 @@
 // Optimaliseren en beveiligen
+import { L } from './i18n.js';
 import { makeCanvas, canvasBlob, loadBitmap, el, F, PDFLib, loadPdf, parseRange, baseName, mm, drawTextAt, hexToRgb, visualBox, v2p, safeText, fmtBytes, readBytes, isImageFile, toast } from './core.js';
 
 const { PDFDocument, PDFName, PDFDict, PDFArray, PDFStream, PDFRawStream, PDFNumber, PDFString, PDFHexString, StandardFonts, degrees, decodePDFRawStream } = PDFLib;
@@ -244,7 +245,7 @@ const watermark = {
       ...(ctx.opts.kind === 'image'
         ? [el('div', { class: 'field' }, el('label', { for: 'wm-img' }, 'Afbeelding (PNG of JPG)'), imgIn, ctx.wmImage ? el('div', { class: 'help' }, 'Gekozen: ' + ctx.wmImage.name) : null),
           F.range(ctx, 'scale', 'Breedte (% van pagina)', 50, { min: 5, max: 100, fmt: (v) => v + '%' })]
-        : [F.text(ctx, 'text', 'Tekst', 'VERTROUWELIJK'),
+        : [F.text(ctx, 'text', 'Tekst', L('VERTROUWELIJK', 'CONFIDENTIAL')),
           el('div', { class: 'row2' }, F.number(ctx, 'size', 'Grootte (pt)', 60, { min: 6, max: 300 }), F.color(ctx, 'color', 'Kleur', '#1B93A5')),
           F.select(ctx, 'font', 'Lettertype', [['HelveticaBold', 'Helvetica vet'], ['Helvetica', 'Helvetica'], ['TimesRomanBold', 'Times vet'], ['CourierBold', 'Courier vet']], 'HelveticaBold')]),
       F.range(ctx, 'opacity', 'Dekking', 25, { min: 5, max: 100, fmt: (v) => v + '%' }),
@@ -311,7 +312,7 @@ async function stampHF(ctx, doc, file, onlyIdx) {
     if (onlyIdx != null && i !== onlyIdx) continue;
     for (const [k, , pos] of SLOTS) {
       const t = (o[k] || '').trim(); if (!t) continue;
-      const txt = t.replace(/\{pagina\}/gi, i + 1).replace(/\{totaal\}/gi, pages.length).replace(/\{datum\}/gi, datum).replace(/\{bestand\}/gi, baseName(file.name));
+      const txt = t.replace(/\{(pagina|page)\}/gi, i + 1).replace(/\{(totaal|total)\}/gi, pages.length).replace(/\{(datum|date)\}/gi, datum).replace(/\{(bestand|file)\}/gi, baseName(file.name));
       drawTextAt(pages[i], txt, { font, size: +o.size || 9, pos, margin: mm(+o.margin || 10), color: hexToRgb(o.color || '#000000') });
     }
   }
@@ -320,7 +321,7 @@ async function stampHF(ctx, doc, file, onlyIdx) {
 const headerFooter = {
   runLabel: 'Kop- en voettekst toevoegen', lead: 'Gebruik {pagina}, {totaal}, {datum} en {bestand} als variabelen.',
   options: (ctx) => [
-    el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, SLOTS.map(([k, l]) => F.text(ctx, k, l, k === 'fr' ? 'Pagina {pagina} van {totaal}' : k === 'fl' ? '{bestand}' : ''))),
+    el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, SLOTS.map(([k, l]) => F.text(ctx, k, l, k === 'fr' ? L('Pagina {pagina} van {totaal}', 'Page {page} of {total}') : k === 'fl' ? '{bestand}' : ''))),
     el('div', { class: 'row2' }, F.select(ctx, 'font', 'Lettertype', [['Helvetica', 'Helvetica'], ['HelveticaBold', 'Helvetica vet'], ['TimesRoman', 'Times'], ['Courier', 'Courier']], 'Helvetica'),
       F.number(ctx, 'size', 'Grootte (pt)', 9, { min: 4, max: 48 }), F.number(ctx, 'margin', 'Marge (mm)', 10, { min: 0, step: 0.5 }), F.color(ctx, 'color', 'Kleur', '#004974')),
     F.text(ctx, 'range', "Pagina's", '', { placeholder: 'alle' }), F.check(ctx, 'skipFirst', 'Niet op de eerste pagina', false)

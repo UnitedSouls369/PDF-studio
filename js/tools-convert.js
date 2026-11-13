@@ -1,4 +1,5 @@
 // Converteren en analyseren
+import { L } from './i18n.js';
 import { makeCanvas, canvasBlob, loadBitmap, bmpW, bmpH, el, F, PDFLib, newDoc, parseRange, baseName, mm, openPdfJs, renderPage } from './core.js';
 
 const plural = (n) => `${n} pagina${n === 1 ? '' : "'s"}`;
@@ -43,7 +44,7 @@ const imagesToPdf = {
     F.select(ctx, 'size', 'Paginaformaat', [['a4', 'A4'], ['letter', 'Letter'], ['a3', 'A3'], ['fit', 'Zelfde als afbeelding']], 'a4'),
     F.seg(ctx, 'orient', 'Richting', [['auto', 'Automatisch'], ['portrait', 'Staand'], ['landscape', 'Liggend']], 'auto', { horizontal: true }),
     F.select(ctx, 'margin', 'Marge', [['0', 'Geen'], ['10', 'Klein (10 mm)'], ['20', 'Groot (20 mm)']], '10'),
-    F.text(ctx, 'outName', 'Naam van het resultaat', 'Afbeeldingen.pdf')
+    F.text(ctx, 'outName', 'Naam van het resultaat', L('Afbeeldingen.pdf', 'Images.pdf'))
   ],
   summary: (ctx) => ctx.files.length ? `${ctx.files.length} afbeelding${ctx.files.length > 1 ? 'en' : ''} → ${plural(ctx.files.length)}` : 'Nog geen afbeelding gekozen',
   async run(ctx) {

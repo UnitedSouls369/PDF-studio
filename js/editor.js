@@ -568,7 +568,7 @@ function page(app, { topbar, id }) {
       if (overflow.length) toast(`Let op: ${overflow.length} gewijzigde regel(s) passen niet: ze lopen voorbij de marge of overlappen met tekst ernaast (max. ${Math.max(...overflow.map((x) => x.mm))} mm).`);
       const reds = S.objs.filter((o) => o.type === 'redact');
       if (reds.length) bytes = await applyRedactions(bytes, reds);
-      const name = baseName(S.file.name) + '_bewerkt.pdf';
+      const name = baseName(S.file.name) + (document.documentElement.lang === 'en' ? '_edited.pdf' : '_bewerkt.pdf');
       window.__lastResult = { title: 'Opgeslagen', outputs: [{ name, data: bytes }] };
       await saveFile(name, bytes); S.dirty = false; toast(`Opgeslagen als ${name}`);
     } catch (e) { console.error(e); toast('Opslaan mislukt: ' + e.message, 'error'); }

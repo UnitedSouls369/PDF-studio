@@ -101,3 +101,4 @@ input::placeholder,textarea::placeholder{color:#4F8A5B}
 /* scrollbalken */
 *{scrollbar-color:var(--ln) #000}
 @media (prefers-reduced-motion:reduce){.matrix-rain{display:none}}
+.lang-opt[aria-pressed=true]{background:var(--g)!important;color:#000!important}.lang-switch{border-color:var(--ln)}

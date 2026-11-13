@@ -1,6 +1,7 @@
 // PDF Studio — startpagina, routing en het gedeelde toolscherm
 import { el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
 import { PageGrid } from './grid.js';
+import { startI18n, langSwitch, tr, lang } from './i18n.js';
 import { ORGANIZE } from './tools-organize.js';
 
 const IMPL = { ...ORGANIZE };
@@ -61,7 +62,7 @@ const LOGO = new URL('../logo.png', import.meta.url).href;
 function topbar(right) {
   return el('header', { class: 'top' },
     el('a', { href: '#', 'aria-label': 'PDF Studio – startpagina', style: { display: 'flex' } }, el('img', { src: LOGO, alt: '' })),
-    el('div', { class: 'sep' }), el('span', { class: 'app' }, 'PDF Studio'), el('div', { class: 'sp' }), right);
+    el('div', { class: 'sep' }), el('span', { class: 'app' }, 'PDF Studio'), el('div', { class: 'sp' }), langSwitch(el), right);
 }
 
 /* ---------------- Startpagina ---------------- */
@@ -74,7 +75,7 @@ function renderHome() {
     body.innerHTML = '';
     let n = 0;
     for (const s of CATALOG) {
-      const tools = s.tools.filter(([id, name, , desc]) => !term || (name + ' ' + desc).toLowerCase().includes(term));
+      const tools = s.tools.filter(([id, name, , desc]) => !term || (name + ' ' + desc + ' ' + tr(name) + ' ' + tr(desc)).toLowerCase().includes(term));
       if (!tools.length) continue;
       n += tools.length;
       body.append(el('section', null,
@@ -228,6 +229,7 @@ function renderTool(def) {
   function showResult(res, ms) {
     resultBox.innerHTML = '';
     if (!res) return;
+    (res.outputs || []).forEach((o) => { o.name = outName(o.name); }); if (res.zipName) res.zipName = outName(res.zipName);
     const outs = res.outputs || [];
     const box = el('div', { class: 'result', role: 'status' }, el('h3', null, res.title || 'Klaar'));
     if (res.note) box.append(el('div', { class: 'note' }, res.note));
@@ -278,6 +280,14 @@ async function thumbFor(f) {
   thumbCache.set(f, c); return c;
 }
 
+// Bestandsnamen van resultaten in de gekozen taal
+const SUF = { bewerkt: 'edited', gesplitst: 'split', extract: 'extract', paginas: 'pages', geordend: 'organised', geroteerd: 'rotated', bijgesneden: 'cropped', genummerd: 'numbered', gecomprimeerd: 'compressed', 'zonder-metadata': 'no-metadata', beveiligd: 'protected', ontgrendeld: 'unlocked', watermerk: 'watermark', plat: 'flattened', 'kop-voet': 'header-footer', afbeeldingen: 'images' };
+export function outName(n) {
+  if (lang() !== 'en' || !n) return n;
+  return n.replace(/_(bewerkt|gesplitst|extract|paginas|geordend|geroteerd|bijgesneden|genummerd|gecomprimeerd|zonder-metadata|beveiligd|ontgrendeld|watermerk|plat|kop-voet|afbeeldingen)((?:\.\w+)?)$/, (m, k, e) => '_' + SUF[k] + e)
+    .replace(/^Geordend\.pdf$/, 'Organised.pdf').replace(/^zoekresultaten_/, 'search-results_');
+}
+
 /* ---------------- Router ---------------- */
 let loaded = false;
 async function ensureModules() {
@@ -295,5 +305,6 @@ async function route() {
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
+startI18n();
 route();
 export { META };

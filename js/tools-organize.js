@@ -1,4 +1,5 @@
 // Pagina's organiseren
+import { L } from './i18n.js';
 import { el, F, PDFLib, loadPdf, newDoc, parseRange, rangeString, baseName, mm, drawTextAt, hexToRgb, toRoman, visualBox, v2p } from './core.js';
 
 const { PDFDocument, PDFName, PDFHexString, PDFNull, degrees, StandardFonts } = PDFLib;
@@ -33,7 +34,7 @@ const merge = {
   input: { multiple: true, min: 2 }, perFileRange: true, runLabel: "PDF's samenvoegen",
   lead: 'Voeg bestanden toe, zet ze in de juiste volgorde en voeg ze samen tot één PDF.',
   options: (ctx) => [
-    F.text(ctx, 'outName', 'Naam van het resultaat', 'Samengevoegd.pdf'),
+    F.text(ctx, 'outName', 'Naam van het resultaat', L('Samengevoegd.pdf', 'Merged.pdf')),
     F.check(ctx, 'outline', 'Bladwijzer per bestand toevoegen', true),
     F.check(ctx, 'normalize', 'Alle pagina\'s even breed maken (schalen naar breedste)', false)
   ],
@@ -206,7 +207,7 @@ const crop = {
 };
 
 /* ---------- Paginanummering ---------- */
-const FORMATS = [['{n}', '1, 2, 3 …'], ['Pagina {n} van {t}', 'Pagina 1 van 12'], ['{n} / {t}', '1 / 12'], ['{r}', 'i, ii, iii …'], ['- {n} -', '- 1 -']];
+const FORMATS = [['{n}', '1, 2, 3 …'], ['{P} {n} {V} {t}', 'Pagina 1 van 12'], ['{n} / {t}', '1 / 12'], ['{r}', 'i, ii, iii …'], ['- {n} -', '- 1 -']];
 const FONTS = [['Helvetica', 'Helvetica'], ['HelveticaBold', 'Helvetica vet'], ['TimesRoman', 'Times'], ['Courier', 'Courier']];
 async function numberDoc(ctx, doc, onlyFirst) {
   const o = ctx.opts; const font = await doc.embedFont(StandardFonts[o.font] || StandardFonts.Helvetica);
@@ -218,7 +219,7 @@ async function numberDoc(ctx, doc, onlyFirst) {
     if (onlyFirst && i !== onlyFirst.idx) return;
     const num = (counted ? k : i) + (+o.start || 1);
     const tot = (counted ? counted.length : total) + (+o.start || 1) - 1;
-    const txt = String(o.format).replace('{n}', num).replace('{t}', tot).replace('{r}', toRoman(num));
+    const txt = String(o.format).replace('{P}', L('Pagina', 'Page')).replace('{V}', L('van', 'of')).replace('Pagina {n} van {t}', L('Pagina', 'Page') + ' {n} ' + L('van', 'of') + ' {t}').replace('{n}', num).replace('{t}', tot).replace('{r}', toRoman(num));
     drawTextAt(pages[i], txt, { font, size: +o.size || 10, pos: +o.pos, margin: mm(+o.margin || 0), color: hexToRgb(o.color || '#000000') });
   });
   return target;
