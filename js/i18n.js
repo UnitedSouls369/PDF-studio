@@ -10,7 +10,7 @@ export const L = (nl, en) => (current === 'en' ? en : nl);
 /* ---------- Woordenboek (Nederlands → Engels) ---------- */
 const D = {
   // algemeen
-  'PDF Studio': 'PDF Studio', 'ABN PDF Studio': 'ABN PDF Studio', 'Alle hulpmiddelen': 'All tools', 'Open PDF in editor': 'Open PDF in editor', 'Toolbox': 'Toolbox',
+  'Laden…': 'Loading…', 'PDF Studio': 'PDF Studio', 'ABN PDF Studio': 'ABN PDF Studio', 'Alle hulpmiddelen': 'All tools', 'Open PDF in editor': 'Open PDF in editor', 'Toolbox': 'Toolbox',
   'Alle PDF-hulpmiddelen op één plek': 'All PDF tools in one place', 'Zoek een hulpmiddel': 'Search for a tool',
   "Bewerk, organiseer, beveilig en converteer PDF's — gratis en intern bij ABN. Bestanden worden lokaal in uw browser verwerkt.": 'Edit, organise, protect and convert PDFs — free and internal at ABN. Files are processed locally in your browser.',
   "Bewerk, organiseer, beveilig en converteer PDF's — gratis, ook zonder internet. Bestanden worden lokaal in uw browser verwerkt.": 'Edit, organise, protect and convert PDFs — free, even without internet. Files are processed locally in your browser.',

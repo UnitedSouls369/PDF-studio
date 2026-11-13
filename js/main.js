@@ -1,11 +1,11 @@
 // PDF Studio — startpagina, routing en het gedeelde toolscherm
-import { el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
+import { loadLibs, el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
 import { PageGrid } from './grid.js';
 import { startI18n, langSwitch, tr, lang } from './i18n.js';
-import { ORGANIZE } from './tools-organize.js';
-
-const IMPL = { ...ORGANIZE };
+const IMPL = {};
+const SOON = new Set(['pdfa', 'pdf-to-word', 'word-to-pdf', 'ocr', 'scan-clean']); // tegels met 'Binnenkort' (modules laden pas op de achtergrond)
 const MODULES = [
+  () => import('./tools-organize.js').then((m) => m.ORGANIZE),
   () => import('./tools-optimize.js').then((m) => m.OPTIMIZE),
   () => import('./tools-convert.js').then((m) => m.CONVERT),
   () => import('./editor.js').then((m) => m.EDIT)
@@ -81,7 +81,7 @@ function renderHome() {
       body.append(el('section', null,
         el('div', { class: 'sec-h' }, el('span'), el('h2', null, s.title)),
         el('div', { class: 'tiles' }, tools.map(([id, name, ic, desc]) => {
-          const ok = !!IMPL[id];
+          const ok = !SOON.has(id);
           const inner = [el('span', { class: 'ic' }, icon(ic, 24, '#004974')),
             el('span', null, el('span', { class: 't' }, name), el('span', { class: 'd' }, desc), ok ? null : el('span', { class: 'badge' }, 'Binnenkort'))];
           return ok ? el('a', { class: 'tile', href: '#' + id, 'data-tool': id }, inner)
@@ -289,15 +289,20 @@ export function outName(n) {
 }
 
 /* ---------------- Router ---------------- */
-let loaded = false;
-async function ensureModules() {
-  if (loaded) return; loaded = true;
-  const res = await Promise.allSettled(MODULES.map((m) => m()));
-  res.forEach((r) => { if (r.status === 'fulfilled' && r.value) Object.assign(IMPL, r.value); else if (r.status === 'rejected' && !String(r.reason).includes('Failed to fetch')) console.warn(r.reason); });
+let modsP;
+function ensureModules() {
+  return modsP || (modsP = loadLibs().then(() => Promise.allSettled(MODULES.map((m) => m()))).then((res) => {
+    res.forEach((r) => { if (r.status === 'fulfilled' && r.value) Object.assign(IMPL, r.value); else if (r.status === 'rejected' && !String(r.reason).includes('Failed to fetch')) console.warn(r.reason); });
+  }).catch((e) => { modsP = null; throw e; }));
 }
+const idle = window.requestIdleCallback || ((f) => setTimeout(f, 200));
+let routeN = 0;
 async function route() {
-  await ensureModules();
-  const id = location.hash.replace(/^#/, '');
+  const id = location.hash.replace(/^#/, ''); const n = ++routeN;
+  if (!id) { renderHome(); window.scrollTo(0, 0); idle(() => ensureModules().catch(() => {})); return; }
+  if (!modsP || !Object.keys(IMPL).length) { app.replaceChildren(el('div', { class: 'boot' }, el('span', { class: 'spin' }), el('span', null, 'Laden…'))); }
+  try { await ensureModules(); } catch (e) { toast('Laden mislukt: ' + e.message, 'error'); return; }
+  if (n !== routeN) return; // intussen naar een andere pagina gegaan
   const def = IMPL[id];
   if (def && def.page) { def.page(app, { topbar, meta: META[id] || def, id }); }
   else if (def) renderTool({ id, ...def });

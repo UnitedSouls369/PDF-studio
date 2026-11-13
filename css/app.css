@@ -13,7 +13,8 @@ button:disabled{cursor:not-allowed;opacity:.55}
 a{color:var(--navy)}
 h1,h2,h3{font-family:var(--fh);font-weight:600;margin:0}
 :focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
-.boot{padding:40px;font-family:var(--fh)}
+.boot{padding:40px;font-family:var(--fh);display:flex;gap:10px;align-items:center}
+.boot .spin{border-color:currentColor;border-top-color:transparent;opacity:.6}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
 /* Topbalk */

@@ -1,12 +1,28 @@
 // PDF Studio — gedeelde hulpfuncties
-import * as pdfjsLib from '../lib/pdfjs/pdf.min.js';
-
-export const PDFLib = window.PDFLib;
-export const fflate = window.fflate;
-export { pdfjsLib };
+// De zware bibliotheken (pdf-lib, fflate, pdf.js ≈ 1,1 MB) worden pas geladen wanneer een hulpmiddel ze nodig heeft,
+// zodat de startpagina meteen verschijnt. loadLibs() is idempotent.
+export let PDFLib = window.PDFLib;
+export let fflate = window.fflate;
+export let pdfjsLib;
 
 const BASE = new URL('../', import.meta.url).href;
-pdfjsLib.GlobalWorkerOptions.workerSrc = BASE + 'lib/pdfjs/pdf.worker.min.js';
+const classic = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = BASE + src; s.onload = res; s.onerror = () => rej(new Error('Kon ' + src + ' niet laden')); document.head.append(s); });
+let libsP;
+export function loadLibs() {
+  return libsP || (libsP = Promise.all([
+    PDFLib ? null : classic('lib/pdf-lib.min.js').then(() => { PDFLib = window.PDFLib; tunePdfLib(PDFLib); }),
+    fflate ? null : classic('lib/fflate.min.js').then(() => { fflate = window.fflate; }),
+    import('../lib/pdfjs/pdf.min.js').then((m) => { pdfjsLib = m; m.GlobalWorkerOptions.workerSrc = BASE + 'lib/pdfjs/pdf.worker.min.js'; })
+  ]).catch((e) => { libsP = null; throw e; }));
+}
+// pdf-lib geeft standaard na elke 100 objecten (laden) / 50 objecten (opslaan) de browser even terug; bij grote PDF's kost dat
+// honderden milliseconden wachttijd. Grotere stappen houden het scherm nog steeds vlot maar zijn veel sneller.
+function tunePdfLib(L) {
+  const D = L.PDFDocument; const load0 = D.load.bind(D); const save0 = D.prototype.save;
+  D.load = (bytes, o = {}) => load0(bytes, { parseSpeed: 2000, ...o });
+  D.prototype.save = function (o = {}) { return save0.call(this, { objectsPerTick: 1500, ...o }); };
+}
+if (PDFLib) tunePdfLib(PDFLib);
 
 /* ---------- DOM ---------- */
 export function el(tag, attrs, ...kids) {
@@ -238,10 +254,11 @@ class StudioDataFactory {
 }
 const PDFJS_OPTS = { BinaryDataFactory: StudioDataFactory, useWorkerFetch: false, standardFontDataUrl: BASE + 'lib/pdfjs/data/', wasmUrl: BASE + 'lib/pdfjs/wasm/', isEvalSupported: false };
 export function openPdfJs(entry) {
-  if (!entry._pdfjs) entry._pdfjs = pdfjsLib.getDocument({ ...PDFJS_OPTS, data: entry.bytes.slice(), password: entry.password || undefined }).promise;
+  if (!entry._pdfjs) entry._pdfjs = loadLibs().then(() => pdfjsLib.getDocument({ ...PDFJS_OPTS, data: entry.bytes.slice(), password: entry.password || undefined }).promise);
   return entry._pdfjs;
 }
 export async function bytesToPdfJs(bytes, password) {
+  await loadLibs();
   return pdfjsLib.getDocument({ ...PDFJS_OPTS, data: bytes.slice(), password }).promise;
 }
 export async function renderPage(pdf, num, { width, scale, rotation = 0, canvas } = {}) {

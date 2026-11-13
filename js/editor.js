@@ -228,11 +228,13 @@ function page(app, { topbar, id }) {
     try {
       if (sig === '[]') { pg.view = null; pg.overflow = []; pg.fontReport = new Map(); }
       else {
-        let { bytes, removed, overflow, fontReport } = await buildPdf(new Set(), { only: pg.i, textOnly: true });
-        const bad = await verifyRemoval(bytes, removed);
-        if (bad.length) ({ bytes, removed, overflow, fontReport } = await buildPdf(new Set(bad), { only: pg.i, textOnly: true }));
+        // voorbeeld op een losse kopie van alleen deze pagina: veel sneller dan het hele document opnieuw opbouwen
+        const single = pg.single || (pg.single = await singlePage(pg.i));
+        let { bytes, removed, overflow, fontReport } = await buildPdf(new Set(), { only: pg.i, textOnly: true, single });
+        const bad = await verifyRemoval(bytes, removed, true);
+        if (bad.length) ({ bytes, removed, overflow, fontReport } = await buildPdf(new Set(bad), { only: pg.i, textOnly: true, single }));
         if (pg.pvSig !== sig) return; // inmiddels weer gewijzigd
-        const doc = await bytesToPdfJs(bytes); pg.view = await doc.getPage(pg.i); pg.pvMode = removed.has(pg.i) ? 'engine' : 'cover'; pg.overflow = overflow; pg.fontReport = fontReport;
+        const doc = await bytesToPdfJs(bytes); pg.view = await doc.getPage(1); pg.pvMode = removed.has(pg.i) ? 'engine' : 'cover'; pg.overflow = overflow; pg.fontReport = fontReport;
       }
       pg.rendered = 0; await renderPg(pg); drawObjects(); drawProps();
     } catch (e) { console.warn('voorbeeld', e); }
@@ -574,8 +576,14 @@ function page(app, { topbar, id }) {
     } catch (e) { console.error(e); toast('Opslaan mislukt: ' + e.message, 'error'); }
     finally { saveBtn.innerHTML = lbl; drawStatus(); }
   }
-  async function buildPdf(skip = new Set(), { only = null, textOnly = false } = {}) {
-    const doc = await loadPdf(S.file); const pages = doc.getPages(); const fonts = {}; const ctx = doc.context; const docFonts = new Map();
+  async function singlePage(pn) {
+    const src = await (S._srcDoc || (S._srcDoc = loadPdf(S.file)));
+    const d = await PDFLib.PDFDocument.create({ updateMetadata: false }); d.addPage((await d.copyPages(src, [pn - 1]))[0]);
+    return d.save({ useObjectStreams: false });
+  }
+  async function buildPdf(skip = new Set(), { only = null, textOnly = false, single = null } = {}) {
+    const doc = single ? await loadPdf({ bytes: single }) : await loadPdf(S.file); const pages0 = doc.getPages();
+    const pages = single ? { [only - 1]: pages0[0] } : pages0; const fonts = {}; const ctx = doc.context; const docFonts = new Map();
     // tekst vervangen in de paginacode zelf (origineel lettertype, rest van de regel schuift mee)
     const removed = new Set(); const overflow = []; const fontReport = new Map();
     const editPages = [...new Set(S.objs.filter((o) => o.type === 'textedit').map((o) => o.page))].filter((pn) => only == null || pn === only);
@@ -646,11 +654,11 @@ function page(app, { topbar, id }) {
     return { bytes: await doc.save({ useObjectStreams: true }), removed, overflow, fontReport };
   }
   // Controle: staat alle niet-bewerkte tekst er nog en is de oude tekst weg?
-  async function verifyRemoval(bytes, pagesSet) {
+  async function verifyRemoval(bytes, pagesSet, single = false) {
     const bad = []; if (!pagesSet.size) return bad; const pdf = await bytesToPdfJs(bytes);
     const norm = (x) => x.replace(/\s+/g, '');
     for (const pn of pagesSet) {
-      const tc = await (await pdf.getPage(pn)).getTextContent(); const now = norm(tc.items.map((i) => i.str || '').join(''));
+      const tc = await (await pdf.getPage(single ? 1 : pn)).getTextContent(); const now = norm(tc.items.map((i) => i.str || '').join(''));
       const pg = S.pages[pn - 1]; const edits = S.objs.filter((o) => o.type === 'textedit' && o.page === pn); const srcs = new Set(edits.map((o) => o.src));
       const keptOk = pg.textItems.every((it, k) => srcs.has(k) || now.includes(norm(it.str)));
       const count = (hay, t) => { let n = 0, i = 0; while ((i = hay.indexOf(t, i)) >= 0) { n++; i += t.length; } return n; };
