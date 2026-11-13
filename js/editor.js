@@ -1,5 +1,6 @@
 // PDF Studio — editor (tekst bewerken, annoteren, tekenen, formulieren, handtekening, redigeren)
-import { rewritePage, fontsForItems, embedFallbackFont, ensureFontkit } from './textengine.js';
+import { tr } from './i18n.js';
+import { rewritePage, fontsForItems, embedFallbackFont, ensureFontkit, setSubset } from './textengine.js';
 import { addOwnFont, loadOwnFonts, ownFonts, localFontsSupported, findLocalFonts } from './fontlib.js';
 import { makeCanvas, canvasBlob, loadBitmap, bmpW, bmpH } from './core.js';
 import { el, icon, toast, modal, readBytes, isPdfFile, isImageFile, probePdf, openPdfJs, loadPdf, saveFile, baseName, PDFLib, pdfjsLib, safeText, hexToRgb, bytesToPdfJs } from './core.js';
@@ -9,11 +10,21 @@ const { PDFName, PDFHexString, PDFString, StandardFonts, degrees, BlendMode, PDF
 /* ---------- Gereedschappen ---------- */
 const TABS = [
   { id: 'edit', label: 'Bewerken', tools: [['select', 'Selecteren', 'cursor'], ['textedit', 'Tekst bewerken', 'text'], ['text', 'Tekstvak', 'textadd'], ['image', 'Afbeelding', 'image'], ['link', 'Koppeling', 'link'], ['whiteout', 'Witmaken', 'whiteout']] },
-  { id: 'annot', label: 'Annoteren', tools: [['select', 'Selecteren', 'cursor'], ['highlight', 'Markeren', 'highlight'], ['underline', 'Onderstrepen', 'underline'], ['strike', 'Doorhalen', 'strike'], ['comment', 'Opmerking', 'comment'], ['ink', 'Tekenen', 'draw'], ['rect', 'Rechthoek', 'shape'], ['ellipse', 'Ellips', 'shape'], ['arrow', 'Pijl', 'convert']] },
+  { id: 'annot', label: 'Annoteren', tools: [['select', 'Selecteren', 'cursor'], ['highlight', 'Markeren', 'highlight'], ['underline', 'Onderstrepen', 'underline'], ['strike', 'Doorhalen', 'strike'], ['comment', 'Opmerking', 'comment'], ['ink', 'Tekenen', 'draw'], ['rect', 'Rechthoek', 'shape'], ['ellipse', 'Ellips', 'shape'], ['stamp', 'Stempel', 'stamp'], ['arrow', 'Pijl', 'convert']] },
   { id: 'forms', label: 'Formulieren & handtekening', tools: [['select', 'Selecteren', 'cursor'], ['sign', 'Handtekening', 'sign'], ['date', 'Datum', 'textadd'], ['check', 'Vinkje', 'check']] },
-  { id: 'protect', label: 'Redigeren', tools: [['select', 'Selecteren', 'cursor'], ['redact', 'Redigeren', 'redact']] }
+  { id: 'protect', label: 'Redigeren', tools: [['select', 'Selecteren', 'cursor'], ['redact', 'Redigeren', 'redact']] },
+  { id: 'measure', label: 'Meten', tools: [['select', 'Selecteren', 'cursor'], ['mdist', 'Afstand', 'dist'], ['mperim', 'Omtrek', 'perim'], ['marea', 'Oppervlakte', 'area'], ['mscale', 'Schaal kalibreren', 'scale']] },
+  { id: 'formdesign', label: 'Formulier ontwerpen', tools: [['select', 'Selecteren', 'cursor'], ['ftext', 'Tekstveld', 'field'], ['fmulti', 'Tekstvak', 'textadd'], ['fcheck', 'Selectievakje', 'check'], ['fradio', 'Keuzerondje', 'radio'], ['fdrop', 'Keuzelijst', 'drop'], ['fdate', 'Datumveld', 'textadd'], ['fsig', 'Handtekeningveld', 'sigfield']] }
 ];
-const DRAG_TOOLS = new Set(['link', 'whiteout', 'highlight', 'underline', 'strike', 'rect', 'ellipse', 'arrow', 'redact']);
+const FIELD_TOOLS = { ftext: [160, 22], fmulti: [240, 64], fcheck: [14, 14], fradio: [14, 14], fdrop: [150, 22], fdate: [100, 22], fsig: [180, 48] };
+const FIELD_NAMES = { ftext: 'Tekstveld', fmulti: 'Tekstvak', fcheck: 'Selectievakje', fradio: 'Keuzerondje', fdrop: 'Keuzelijst', fdate: 'Datum', fsig: 'Handtekening' };
+const STAMPS = [['approved', 'GOEDGEKEURD', '#1E7B3A'], ['rejected', 'AFGEKEURD', '#B3261E'], ['draft', 'CONCEPT', '#1F5FAF'], ['forexec', 'VOOR UITVOERING', '#1E7B3A'], ['asbuilt', 'AS-BUILT', '#004974'], ['seen', 'GEZIEN', '#004974'], ['info', 'TER INFO', '#1F5FAF'], ['conf', 'VERTROUWELIJK', '#B3261E'], ['void', 'VERVALLEN', '#B3261E'], ['custom', '', '#004974']];
+const SCALES = [['1', '1:1 (papier)'], ['5', '1:5'], ['10', '1:10'], ['20', '1:20'], ['25', '1:25'], ['50', '1:50'], ['100', '1:100'], ['200', '1:200'], ['500', '1:500'], ['1000', '1:1000']];
+const UNITS = { mm: 1, cm: 10, m: 1000 };
+const MM_PER_PT = 25.4 / 72;
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const DRAG_TOOLS = new Set(['ftext', 'fmulti', 'fcheck', 'fradio', 'fdrop', 'fdate', 'fsig', 'link', 'whiteout', 'highlight', 'underline', 'strike', 'rect', 'ellipse', 'arrow', 'redact']);
 const HELP = {
   select: 'Klik op een element om het te selecteren, te verplaatsen of aan te passen. Delete verwijdert het.',
   textedit: 'Klik op bestaande tekst om ze te wijzigen. De originele tekst wordt afgedekt en vervangen.',
@@ -25,9 +36,17 @@ const HELP = {
   comment: 'Klik op de pagina om een notitie te plaatsen.', ink: 'Teken met de muis of pen op de pagina.',
   rect: 'Sleep om een rechthoek te tekenen.', ellipse: 'Sleep om een ellips te tekenen.', arrow: 'Sleep van begin- naar eindpunt.',
   sign: 'Teken of typ uw handtekening; ze verschijnt op de huidige pagina.', date: 'Klik op de pagina om de datum van vandaag te plaatsen.', check: 'Klik op de pagina om een vinkje te plaatsen.',
-  redact: 'Sleep zwarte vlakken over gevoelige inhoud. Bij opslaan wordt de inhoud eronder definitief verwijderd.'
+  redact: 'Sleep zwarte vlakken over gevoelige inhoud. Bij opslaan wordt de inhoud eronder definitief verwijderd.',
+  stamp: 'Kies een stempel en klik op de pagina om hem te plaatsen.',
+  mdist: 'Sleep van het ene punt naar het andere. Houd Shift ingedrukt voor een horizontale, verticale of schuine lijn van 45°.',
+  mperim: 'Klik de hoekpunten aan. Dubbelklik, klik op het eerste punt of druk Enter om af te sluiten; Esc annuleert.',
+  marea: 'Klik de hoekpunten van de oppervlakte aan. Dubbelklik, klik op het eerste punt of druk Enter om af te sluiten; Esc annuleert.',
+  mscale: 'Sleep over een maat waarvan u de echte lengte kent (bv. een maatlijn op het plan) en vul die lengte in.',
+  ftext: 'Klik of sleep om een tekstveld te plaatsen.', fmulti: 'Sleep om een tekstvak met meerdere regels te plaatsen.', fcheck: 'Klik om een selectievakje te plaatsen.',
+  fradio: 'Klik om een keuzerondje te plaatsen. Rondjes met dezelfde groepsnaam sluiten elkaar uit.', fdrop: 'Klik of sleep om een keuzelijst te plaatsen en vul de keuzes in.',
+  fdate: 'Klik of sleep om een datumveld (dd-mm-jjjj) te plaatsen.', fsig: 'Sleep om een veld te plaatsen waarin iemand later digitaal kan ondertekenen.'
 };
-const MODE_FROM_HASH = { 'edit-text': ['edit', 'textedit'], 'edit-image': ['edit', 'image'], 'edit-link': ['edit', 'link'], 'edit-annotate': ['annot', 'highlight'], 'edit-draw': ['annot', 'ink'], 'fill-form': ['forms', 'select'], 'edit-sign': ['forms', 'sign'], 'edit-redact': ['protect', 'redact'] };
+const MODE_FROM_HASH = { 'edit-text': ['edit', 'textedit'], 'edit-image': ['edit', 'image'], 'edit-link': ['edit', 'link'], 'edit-annotate': ['annot', 'highlight'], 'edit-draw': ['annot', 'ink'], 'fill-form': ['forms', 'select'], 'edit-sign': ['forms', 'sign'], 'edit-redact': ['protect', 'redact'], 'edit-measure': ['measure', 'mdist'], 'edit-stamp': ['annot', 'stamp'], 'form-design': ['formdesign', 'ftext'] };
 const FAMILIES = { Helvetica: 'Helvetica, Arial, sans-serif', Times: '"Times New Roman", Times, serif', Courier: '"Courier New", Courier, monospace' };
 function stdFont(fam, bold, italic) {
   if (fam === 'Times') return bold && italic ? 'TimesRomanBoldItalic' : bold ? 'TimesRomanBold' : italic ? 'TimesRomanItalic' : 'TimesRoman';
@@ -41,7 +60,7 @@ const rgbHex = (r, g, b) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2
 function page(app, { topbar, id }) {
   document.title = 'Editor – PDF Studio';
   const [tab0, tool0] = MODE_FROM_HASH[id] || ['edit', 'textedit'];
-  const S = { file: null, pdf: null, pages: [], scale: 1, tab: tab0, tool: tool0, objs: [], sel: null, hist: [], fut: [], assets: new Map(), fields: [], formVals: {}, flattenForm: false, seq: 0, dirty: false };
+  const S = { mscale: { ratio: +lsGet('pdfstudio-mscale', 1), unit: lsGet('pdfstudio-munit', 'm'), cal: null }, stamp: { kind: 'approved', text: '', name: lsGet('pdfstudio-stampname', ''), date: true }, file: null, pdf: null, pages: [], scale: 1, tab: tab0, tool: tool0, objs: [], sel: null, hist: [], fut: [], assets: new Map(), fields: [], formVals: {}, flattenForm: false, seq: 0, dirty: false };
   window.__editor = S; // voor tests
 
   const fileIn = el('input', { type: 'file', accept: '.pdf,application/pdf', class: 'sr', id: 'file-in', 'aria-label': 'PDF openen' });
@@ -79,6 +98,7 @@ function page(app, { topbar, id }) {
         el('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Inzoomen', onclick: () => zoom(S.scale * 1.2) }, icon('zin', 18))));
   }
   function setTool(t) {
+    if (S.mdraft) cancelPoly();
     S.tool = t; select(null);
     if (t === 'image') { if (S.pdf) imgIn.click(); }
     if (t === 'sign' && S.pdf) signatureDialog();
@@ -280,17 +300,49 @@ function page(app, { topbar, id }) {
       n.append(el('span', { class: 'ed-linkurl' }, o.url || 'geen adres'));
     } else if (o.type === 'redact') {
       n.append(el('span', { class: 'sr' }, 'Redactievlak'));
+    } else if (o.type === 'measure') {
+      const pts = o.pts.map(([px, py]) => `${(px - o.x) * s},${(py - o.y) * s}`).join(' ');
+      const shape = o.kind === 'area' ? `<polygon points="${pts}" fill="${o.color}" fill-opacity="0.12" stroke="${o.color}" stroke-width="${o.width * s}" stroke-linejoin="round"/>` : `<polyline points="${pts}" fill="none" stroke="${o.color}" stroke-width="${o.width * s}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const ends = o.kind === 'dist' ? o.pts.map(([px, py]) => tick(o, px, py, s)).join('') : o.pts.map(([px, py]) => `<circle cx="${(px - o.x) * s}" cy="${(py - o.y) * s}" r="${2 * s}" fill="${o.color}"/>`).join('');
+      n.innerHTML = `<svg width="100%" height="100%" style="overflow:visible" aria-hidden="true">${shape}${ends}</svg>`;
+      const [lx, ly] = labelPos(o); n.append(el('span', { class: 'ed-mlabel', style: { left: (lx - o.x) * s + 'px', top: (ly - o.y) * s + 'px', color: o.color, fontSize: Math.max(10, 10 * s) + 'px' } }, measureLabel(o)));
+    } else if (o.type === 'stamp') {
+      const fs = stampFont(o); n.style.color = o.color; n.style.borderColor = o.color; n.style.borderWidth = Math.max(1.5, o.h * 0.05) * s + 'px'; n.style.borderRadius = o.h * 0.14 * s + 'px';
+      n.append(el('span', { class: 'ed-st-main', style: { fontSize: fs.main * s + 'px' } }, o.text || ' '), o.sub ? el('span', { class: 'ed-st-sub', style: { fontSize: fs.sub * s + 'px' } }, o.sub) : '');
+    } else if (o.type === 'field') {
+      n.classList.add('ed-f-' + o.ftype);
+      n.append(el('span', { class: 'ed-fname' }, o.ftype === 'fradio' ? `${o.group}: ${o.value}` : o.name), o.ftype === 'fdrop' ? el('span', { class: 'ed-fdrop' }, '▾') : '');
     }
     if (['rect', 'ellipse'].includes(o.type)) { n.style.border = `${o.width * s}px solid ${o.color}`; n.style.background = o.fill || 'transparent'; if (o.type === 'ellipse') n.style.borderRadius = '50%'; }
     if (o.type === 'highlight') n.style.background = o.color;
     if (o.type === 'underline' || o.type === 'strike') n.style.setProperty('--lc', o.color);
     n.addEventListener('pointerdown', (e) => objPointer(e, o, n));
-    if (sel && !['comment'].includes(o.type)) {
+    if (sel && !['comment', 'measure'].includes(o.type)) {
       n.append(el('span', { class: 'ed-handle', 'aria-hidden': 'true', 'data-h': '1' }));
     }
     if (sel) n.append(el('button', { type: 'button', class: 'ed-del', 'aria-label': 'Verwijderen', onclick: (e) => { e.stopPropagation(); remove(o.id); } }, icon('x', 14, '#fff', 2.5)));
     return n;
   }
+  // ----- Meten -----
+  function measureValue(o) {
+    const L = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]); const pts = o.pts; const k = MM_PER_PT * (o.ratio || 1) / (UNITS[o.unit] || 1);
+    if (o.kind === 'dist') return L(pts[0], pts[1]) * k;
+    if (o.kind === 'perim') { let t = 0; for (let i = 1; i < pts.length; i++) t += L(pts[i - 1], pts[i]); return t * k; }
+    let a = 0; for (let i = 0; i < pts.length; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a / 2) * k * k;
+  }
+  const fmtNum = (v) => { const d = v >= 100 ? 1 : v >= 10 ? 2 : 3; return v.toLocaleString(document.documentElement.lang === 'en' ? 'en-GB' : 'nl-BE', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  function measureLabel(o) { const v = measureValue(o); return (o.kind === 'area' ? fmtNum(v) + ' ' + o.unit + '²' : fmtNum(v) + ' ' + o.unit); }
+  function labelPos(o) {
+    const pts = o.pts;
+    if (o.kind === 'dist') return [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
+    if (o.kind === 'perim') { const a = pts[pts.length - 2], b = pts[pts.length - 1]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
+    return [pts.reduce((t, p) => t + p[0], 0) / pts.length, pts.reduce((t, p) => t + p[1], 0) / pts.length];
+  }
+  function tick(o, px, py, s) { const [a, b] = o.pts; const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2; const d = 5; return `<line x1="${(px - o.x + Math.cos(ang) * d) * s}" y1="${(py - o.y + Math.sin(ang) * d) * s}" x2="${(px - o.x - Math.cos(ang) * d) * s}" y2="${(py - o.y - Math.sin(ang) * d) * s}" stroke="${o.color}" stroke-width="${o.width * s}"/>`; }
+  function measureBox(o) { const xs = o.pts.map((p) => p[0]), ys = o.pts.map((p) => p[1]); const x = Math.min(...xs) - 4, y = Math.min(...ys) - 4; Object.assign(o, { x, y, w: Math.max(...xs) - x + 4, h: Math.max(...ys) - y + 4 }); return o; }
+  function addMeasure(pg, kind, pts) { return add(measureBox({ type: 'measure', kind, page: pg.i, pts, color: S.mColor || '#C8102E', width: 1.2, ratio: S.mscale.ratio, unit: S.mscale.unit })); }
+  function stampFont(o) { return o.sub ? { main: o.h * 0.42, sub: o.h * 0.2 } : { main: o.h * 0.58, sub: 0 }; }
+  function stampSub() { const parts = []; if (S.stamp.name.trim()) parts.push(S.stamp.name.trim()); if (S.stamp.date) parts.push(today()); return parts.join(' · '); }
   function arrowHead(x1, y1, x2, y2, len, color, w) {
     const a = Math.atan2(y2 - y1, x2 - x1), b = Math.PI / 7;
     const p1 = [x2 - len * Math.cos(a - b), y2 - len * Math.sin(a - b)], p2 = [x2 - len * Math.cos(a + b), y2 - len * Math.sin(a + b)];
@@ -338,6 +390,24 @@ function page(app, { topbar, id }) {
       if (t === 'text') { const o = add({ type: 'text', page: pg.i, x: x0, y: y0 - 8, w: 220, h: 24, text: '', size: 12, fam: 'Helvetica', bold: false, italic: false, color: '#000000' }); select(o.id, true); return; }
       if (t === 'date') { const o = add({ type: 'text', page: pg.i, x: x0, y: y0 - 8, w: 90, h: 18, text: today(), size: 11, fam: 'Helvetica', bold: false, italic: false, color: '#000000' }); select(o.id); return; }
       if (t === 'check') { add({ type: 'text', page: pg.i, x: x0 - 7, y: y0 - 9, w: 18, h: 18, text: '✓', size: 14, fam: 'Helvetica', bold: true, italic: false, color: '#000000', glyph: 'check' }); return; }
+      if (t === 'stamp') {
+        const [kind, label, color] = STAMPS.find((x) => x[0] === S.stamp.kind) || STAMPS[0]; const text = kind === 'custom' ? (S.stamp.text || tr('STEMPEL')).toUpperCase() : tr(label); const sub = stampSub();
+        const h = sub ? 46 : 34; const w = Math.max(110, text.length * h * (sub ? 0.3 : 0.42) + 24);
+        const o = add({ type: 'stamp', page: pg.i, x: x0 - w / 2, y: y0 - h / 2, w, h, text, sub, color: S.stamp.color || color, kind }); select(o.id); return;
+      }
+      if (t === 'mperim' || t === 'marea') { polyClick(pg, t, x0, y0, e); return; }
+      if (t === 'mdist' || t === 'mscale') {
+        const svgNs = 'http://www.w3.org/2000/svg'; const draft = el('div', { class: 'ed-draft' }); const svg = document.createElementNS(svgNs, 'svg'); svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
+        const ln = document.createElementNS(svgNs, 'line'); ln.setAttribute('stroke', t === 'mscale' ? '#1B93A5' : '#C8102E'); ln.setAttribute('stroke-width', 2); ln.setAttribute('stroke-dasharray', t === 'mscale' ? '6 4' : ''); svg.append(ln);
+        const lab = el('span', { class: 'ed-mlabel' }); draft.append(svg, lab); pg.layer.append(draft); let x1 = x0, y1 = y0;
+        const mv = (ev) => { [x1, y1] = pt(ev); if (ev.shiftKey) { const a = Math.round(Math.atan2(y1 - y0, x1 - x0) / (Math.PI / 4)) * Math.PI / 4; const d = Math.hypot(x1 - x0, y1 - y0); x1 = x0 + Math.cos(a) * d; y1 = y0 + Math.sin(a) * d; }
+          ln.setAttribute('x1', x0 * S.scale); ln.setAttribute('y1', y0 * S.scale); ln.setAttribute('x2', x1 * S.scale); ln.setAttribute('y2', y1 * S.scale);
+          lab.textContent = t === 'mscale' ? '' : measureLabel({ kind: 'dist', pts: [[x0, y0], [x1, y1]], ratio: S.mscale.ratio, unit: S.mscale.unit }); Object.assign(lab.style, { left: (x0 + x1) / 2 * S.scale + 'px', top: (y0 + y1) / 2 * S.scale + 'px' }); };
+        const up = async () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); draft.remove(); const len = Math.hypot(x1 - x0, y1 - y0); if (len < 4) return;
+          if (t === 'mdist') { const o = addMeasure(pg, 'dist', [[x0, y0], [x1, y1]]); select(o.id); }
+          else await calibrate(len); };
+        addEventListener('pointermove', mv); addEventListener('pointerup', up); return;
+      }
       if (t === 'comment') { const o = add({ type: 'comment', page: pg.i, x: x0 - 10, y: y0 - 10, w: 20, h: 20, text: '' }); select(o.id); setTimeout(() => { const ta = document.getElementById('p-comment'); ta && ta.focus(); }, 0); return; }
       if (t === 'ink') {
         e.preventDefault(); const pts = [[x0, y0]];
@@ -356,6 +426,8 @@ function page(app, { topbar, id }) {
         const up = () => {
           removeEventListener('pointermove', mv); removeEventListener('pointerup', up); draft.remove();
           let x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+          if (FIELD_TOOLS[t] && (w < 6 || h < 6)) { [w, h] = FIELD_TOOLS[t]; x = x0; y = y0 - h / 2; }
+          if ((t === 'fcheck' || t === 'fradio') && (w > 40 || h > 40)) { w = h = Math.min(w, h, 40); }
           if (t !== 'arrow' && (w < 3 || h < 3)) { if (['underline', 'strike', 'highlight'].includes(t) && w >= 3) h = 12; else return; }
           if (t === 'arrow' && Math.hypot(w, h) < 5) return;
           const base = { page: pg.i, x, y, w: Math.max(w, 1), h: Math.max(h, 1) };
@@ -366,12 +438,64 @@ function page(app, { topbar, id }) {
           else if (t === 'arrow') o = add({ ...base, x: x - 6, y: y - 6, w: w + 12, h: h + 12, type: t, color: '#C8102E', width: 2, line: [x0, y0, x1, y1] });
           else if (t === 'whiteout') o = add({ ...base, type: t, color: '#FFFFFF' });
           else if (t === 'redact') o = add({ ...base, type: t });
+          else if (FIELD_TOOLS[t]) { o = add({ ...base, type: 'field', ftype: t, name: uniqueName(FIELD_NAMES[t]), required: false, value: t === 'fradio' ? 'Keuze ' + (S.objs.filter((x) => x.ftype === 'fradio').length + 1) : '', group: 'Groep 1', options: t === 'fdrop' ? 'Optie 1\nOptie 2\nOptie 3' : '', fontSize: 0 }); select(o.id); return; }
           else if (t === 'link') { o = add({ ...base, type: t, url: 'https://' }); select(o.id); setTimeout(() => { const i = document.getElementById('p-url'); if (i) { i.focus(); i.select(); } }, 0); return; }
           if (o && ['rect', 'ellipse', 'arrow'].includes(t)) select(o.id);
         };
         addEventListener('pointermove', mv); addEventListener('pointerup', up);
       }
     });
+  }
+
+  // Veelhoek (omtrek/oppervlakte) punt voor punt
+  function polyClick(pg, t, x, y, e) {
+    const D = S.mdraft;
+    if (D && D.pg !== pg) { cancelPoly(); }
+    if (!S.mdraft) {
+      const svgNs = 'http://www.w3.org/2000/svg'; const node = el('div', { class: 'ed-draft' }); const svg = document.createElementNS(svgNs, 'svg'); svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%'); svg.style.overflow = 'visible';
+      const pl = document.createElementNS(svgNs, t === 'marea' ? 'polygon' : 'polyline'); pl.setAttribute('fill', t === 'marea' ? 'rgba(200,16,46,.12)' : 'none'); pl.setAttribute('stroke', '#C8102E'); pl.setAttribute('stroke-width', 2); svg.append(pl);
+      const lab = el('span', { class: 'ed-mlabel' }); node.append(svg, lab); pg.layer.append(node);
+      const move = (ev) => { const r = pg.el.getBoundingClientRect(); S.mdraft.hover = [(ev.clientX - r.left) / S.scale, (ev.clientY - r.top) / S.scale]; drawPoly(); };
+      const dbl = (ev) => { ev.preventDefault(); finishPoly(); };
+      pg.el.addEventListener('pointermove', move); pg.el.addEventListener('dblclick', dbl);
+      S.mdraft = { pg, t, pts: [], node, pl, lab, move, dbl, hover: null };
+    }
+    const d = S.mdraft; const f = d.pts[0];
+    if (f && d.pts.length >= (t === 'marea' ? 3 : 2) && Math.hypot(x - f[0], y - f[1]) * S.scale < 9) { if (t === 'marea') finishPoly(); else { d.pts.push([...f]); finishPoly(); } return; }
+    const last = d.pts[d.pts.length - 1]; if (last && Math.hypot(x - last[0], y - last[1]) * S.scale < 3) return;
+    d.pts.push([x, y]); drawPoly(); if (d.pts.length === 1 || d.pts.length === 2) drawProps();
+  }
+  function drawPoly() {
+    const d = S.mdraft; if (!d) return; const pts = d.hover ? [...d.pts, d.hover] : d.pts;
+    d.pl.setAttribute('points', pts.map(([a, b]) => `${a * S.scale},${b * S.scale}`).join(' '));
+    if (pts.length >= 2) { const o = { kind: d.t === 'marea' ? 'area' : 'perim', pts, ratio: S.mscale.ratio, unit: S.mscale.unit }; const [lx, ly] = labelPos(o); d.lab.textContent = measureLabel(o); Object.assign(d.lab.style, { left: lx * S.scale + 'px', top: ly * S.scale + 'px' }); }
+  }
+  function cancelPoly() { const d = S.mdraft; if (!d) return; d.pg.el.removeEventListener('pointermove', d.move); d.pg.el.removeEventListener('dblclick', d.dbl); d.node.remove(); S.mdraft = null; }
+  function finishPoly() {
+    const d = S.mdraft; if (!d) return; const kind = d.t === 'marea' ? 'area' : 'perim'; const pts = d.pts.map((p) => [...p]); cancelPoly();
+    if (pts.length < (kind === 'area' ? 3 : 2)) return; const o = addMeasure(d.pg, kind, pts); select(o.id);
+  }
+  async function calibrate(lenPt) {
+    const inp = el('input', { type: 'number', id: 'cal-len', min: 0, step: 'any', value: '' }); const un = el('select', { id: 'cal-unit' }, Object.keys(UNITS).map((u) => el('option', { value: u }, u))); un.value = S.mscale.unit;
+    const ok = await modal({ title: 'Schaal kalibreren', body: el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } }, el('p', { class: 'help' }, 'Hoe lang is de lijn die u net trok in werkelijkheid?'), el('div', { class: 'row2' }, el('div', { class: 'field' }, el('label', { for: 'cal-len' }, 'Echte lengte'), inp), el('div', { class: 'field' }, el('label', { for: 'cal-unit' }, 'Eenheid'), un))), ok: 'Schaal instellen', onOk: () => (+inp.value > 0 ? true : (toast('Vul een lengte groter dan 0 in.', 'error'), false)) });
+    if (!ok) return;
+    const realMm = +inp.value * UNITS[un.value]; S.mscale = { ratio: realMm / (lenPt * MM_PER_PT), unit: un.value, cal: true }; lsSet('pdfstudio-mscale', S.mscale.ratio); lsSet('pdfstudio-munit', S.mscale.unit);
+    applyScaleToAll(); toast(`Schaal ingesteld: 1:${fmtNum(S.mscale.ratio)}`); setTool('mdist');
+  }
+  function applyScaleToAll() { let n = 0; S.objs.forEach((o) => { if (o.type === 'measure') { o.ratio = S.mscale.ratio; o.unit = S.mscale.unit; n++; } }); if (n) commit(); drawObjects(); drawProps(); }
+  function uniqueName(base) { const used = new Set([...S.fields.map((f) => f.name), ...S.objs.filter((o) => o.type === 'field').map((o) => o.name)]); let i = 1; while (used.has(base + '_' + i)) i++; return base + '_' + i; }
+  async function autoFields() {
+    let n = 0;
+    for (const pg of S.pages) {
+      if (!pg.textItems) await loadText(pg);
+      for (const it of pg.textItems) {
+        const re = /_{4,}|\.{6,}|…{3,}/g; let m;
+        while ((m = re.exec(it.str))) { const cw = it.w / it.str.length; const x = it.x + cw * m.index, w = cw * m[0].length; if (w < 20) continue; const h = Math.max(14, it.size * 1.25);
+          add({ type: 'field', ftype: 'ftext', page: pg.i, x, y: it.base - h + it.size * 0.25, w, h, name: uniqueName('Tekstveld'), required: false, value: '', group: 'Groep 1', options: '', fontSize: 0 }); n++; }
+        const re2 = /[☐□❑▢]/g; while ((m = re2.exec(it.str))) { const cw = it.w / it.str.length; const sz = Math.max(9, it.size * 0.9); add({ type: 'field', ftype: 'fcheck', page: pg.i, x: it.x + cw * m.index, y: it.base - sz, w: sz, h: sz, name: uniqueName('Selectievakje'), required: false, value: '', group: 'Groep 1', options: '', fontSize: 0 }); n++; }
+      }
+    }
+    toast(n ? `${n} veld(en) herkend. Controleer namen en posities.` : 'Geen invulplaatsen (____ of ☐) gevonden.' , n ? undefined : 'error');
   }
 
   /* ----- Afbeelding en handtekening ----- */
@@ -422,7 +546,7 @@ function page(app, { topbar, id }) {
     const o = selObj();
     if (!S.pdf) { props.append(el('h2', null, 'Editor'), el('p', { class: 'help' }, 'Open een PDF om te beginnen. Alles wordt lokaal in uw browser verwerkt.')); return; }
     if (o) {
-      const T = { text: 'Tekstvak', textedit: 'Tekst', image: o.sig ? 'Handtekening' : 'Afbeelding', link: 'Koppeling', highlight: 'Markering', underline: 'Onderstreping', strike: 'Doorhaling', comment: 'Opmerking', ink: 'Tekening', rect: 'Rechthoek', ellipse: 'Ellips', arrow: 'Pijl', whiteout: 'Witvlak', redact: 'Redactievlak' };
+      const T = { text: 'Tekstvak', textedit: 'Tekst', image: o.sig ? 'Handtekening' : 'Afbeelding', link: 'Koppeling', highlight: 'Markering', underline: 'Onderstreping', strike: 'Doorhaling', comment: 'Opmerking', ink: 'Tekening', rect: 'Rechthoek', ellipse: 'Ellips', arrow: 'Pijl', whiteout: 'Witvlak', redact: 'Redactievlak', measure: 'Meting', stamp: 'Stempel', field: 'Formulierveld' };
       props.append(el('h2', null, T[o.type] || 'Element'));
       if (o.type === 'text' || o.type === 'textedit') {
         const fam = el('select', { id: 'p-font', onchange: () => update(o, { fam: fam.value }) }, Object.keys(FAMILIES).map((f) => el('option', { value: f }, f))); fam.value = o.fam;
@@ -455,6 +579,31 @@ function page(app, { topbar, id }) {
       } else if (o.type === 'image') {
         const op = el('input', { type: 'range', id: 'p-op', min: 10, max: 100, value: Math.round((o.opacity ?? 1) * 100), onchange: () => update(o, { opacity: +op.value / 100 }) });
         props.append(field('Dekking', op), el('div', { class: 'help' }, 'Sleep om te verplaatsen; sleep het hoekje rechtsonder om te schalen.'));
+      } else if (o.type === 'measure') {
+        const col = el('input', { type: 'color', id: 'p-color', value: o.color, onchange: () => update(o, { color: col.value }) });
+        const w = el('input', { type: 'number', id: 'p-width', min: 0.5, max: 10, step: 0.5, value: o.width, onchange: () => update(o, { width: +w.value || 1 }) });
+        props.append(el('div', { class: 'm-value', id: 'm-value' }, measureLabel(o)), el('div', { class: 'help' }, `Schaal 1:${fmtNum(o.ratio)}`), el('div', { class: 'row2' }, field('Kleur', col), field('Lijndikte', w)));
+      } else if (o.type === 'stamp') {
+        const tx = el('input', { type: 'text', id: 'p-stamptext', value: o.text, onchange: () => update(o, { text: tx.value.toUpperCase() }) });
+        const sb = el('input', { type: 'text', id: 'p-stampsub', value: o.sub || '', onchange: () => update(o, { sub: sb.value }) });
+        const col = el('input', { type: 'color', id: 'p-color', value: o.color, onchange: () => update(o, { color: col.value }) });
+        props.append(field('Tekst', tx), field('Onderregel (naam, datum)', sb), field('Kleur', col), el('div', { class: 'help' }, 'Sleep het hoekje rechtsonder om de stempel groter of kleiner te maken.'));
+      } else if (o.type === 'field') {
+        const nm = el('input', { type: 'text', id: 'p-fname', value: o.name, onchange: () => { const v = nm.value.trim(); if (!v || S.objs.some((x) => x !== o && x.type === 'field' && x.name === v && x.ftype !== 'fradio') || S.fields.some((f) => f.name === v)) { toast('Deze veldnaam bestaat al of is leeg.', 'error'); nm.value = o.name; return; } update(o, { name: v }); } });
+        props.append(el('div', { class: 'help' }, FIELD_NAMES[o.ftype]));
+        if (o.ftype === 'fradio') {
+          const g = el('input', { type: 'text', id: 'p-fgroup', value: o.group, onchange: () => update(o, { group: g.value.trim() || 'Groep 1' }) });
+          const v = el('input', { type: 'text', id: 'p-fvalue', value: o.value, onchange: () => update(o, { value: v.value.trim() || 'Keuze' }) });
+          props.append(field('Groepsnaam', g), field('Waarde van dit rondje', v), el('div', { class: 'help' }, 'Rondjes met dezelfde groepsnaam vormen één keuzevraag.'));
+        } else props.append(field('Veldnaam', nm));
+        if (o.ftype === 'fdrop') { const op = el('textarea', { id: 'p-foptions', rows: 5, onchange: () => update(o, { options: op.value }) }); op.value = o.options; props.append(field('Keuzes (één per regel)', op)); }
+        if (['ftext', 'fmulti', 'fdate'].includes(o.ftype)) {
+          const dv = el('input', { type: 'text', id: 'p-fdefault', value: o.value, onchange: () => update(o, { value: dv.value }) });
+          const fs = el('input', { type: 'number', id: 'p-fsize', min: 0, max: 72, value: o.fontSize, onchange: () => update(o, { fontSize: +fs.value || 0 }) });
+          props.append(el('div', { class: 'row2' }, field('Standaardwaarde', dv), field('Lettergrootte (0 = auto)', fs)));
+        }
+        if (o.ftype === 'fcheck') { const c = el('input', { type: 'checkbox', id: 'p-fchecked', onchange: () => update(o, { value: c.checked ? 'on' : '' }) }); c.checked = !!o.value; props.append(el('label', { class: 'check' }, c, 'Standaard aangevinkt')); }
+        if (o.ftype !== 'fsig') { const rq = el('input', { type: 'checkbox', id: 'p-freq', onchange: () => update(o, { required: rq.checked }) }); rq.checked = !!o.required; props.append(el('label', { class: 'check' }, rq, 'Verplicht veld')); }
       } else if (o.type === 'redact') {
         props.append(el('div', { class: 'note-box' }, 'Bij opslaan wordt deze pagina omgezet naar een afbeelding met een zwart vlak. Zo is de onderliggende tekst echt weg en niet meer te kopiëren of te doorzoeken.'));
       } else if (o.type === 'whiteout') props.append(el('div', { class: 'help' }, 'Dekt de inhoud visueel af. De inhoud blijft wel in het bestand; gebruik Redigeren om ze echt te verwijderen.'));
@@ -468,6 +617,9 @@ function page(app, { topbar, id }) {
       props.append(el('div', { class: 'row2' }, field('Kleur', col), field('Lijndikte', w)));
     }
     if (S.tool === 'image') props.append(el('button', { type: 'button', class: 'btn', onclick: () => imgIn.click() }, 'Afbeelding kiezen'));
+    if (S.tool === 'stamp') props.append(stampPanel());
+    if (S.tab === 'measure') props.append(measurePanel());
+    if (S.tab === 'formdesign') props.append(designPanel());
     if (S.tool === 'sign') props.append(el('button', { type: 'button', class: 'btn', onclick: () => signatureDialog() }, 'Handtekening maken'));
     if (S.tab === 'edit' || S.tool === 'textedit') props.append(searchReplacePanel());
     if (S.tab === 'forms') props.append(formPanel());
@@ -519,6 +671,44 @@ function page(app, { topbar, id }) {
     return el('div', { class: 'ed-section' }, el('h3', null, 'Zoeken en vervangen'), field('Zoek', q), field('Vervang door', r),
       el('button', { type: 'button', class: 'btn pri', id: 'sr-go', onclick: go }, 'Alles vervangen'), out);
   }
+  function stampPanel() {
+    const box = el('div', { class: 'ed-section' });
+    const kind = el('select', { id: 'st-kind', onchange: () => { S.stamp.kind = kind.value; S.stamp.color = null; drawProps(); } }, STAMPS.map(([k, label]) => el('option', { value: k }, label || 'Eigen tekst…'))); kind.value = S.stamp.kind;
+    box.append(field('Stempel', kind));
+    if (S.stamp.kind === 'custom') { const tx = el('input', { type: 'text', id: 'st-text', value: S.stamp.text, placeholder: 'bv. GECONTROLEERD', oninput: () => { S.stamp.text = tx.value; } }); box.append(field('Eigen tekst', tx)); }
+    const nm = el('input', { type: 'text', id: 'st-name', value: S.stamp.name, placeholder: 'bv. W. Hermans', oninput: () => { S.stamp.name = nm.value; lsSet('pdfstudio-stampname', nm.value); } });
+    const dt = el('input', { type: 'checkbox', id: 'st-date', onchange: () => { S.stamp.date = dt.checked; } }); dt.checked = S.stamp.date;
+    box.append(field('Naam op de stempel', nm), el('label', { class: 'check' }, dt, 'Datum van vandaag toevoegen'),
+      el('div', { class: 'help' }, 'De stempel wordt vast in de pagina geplaatst, zoals een gedrukte stempel.'));
+    return box;
+  }
+  function measurePanel() {
+    const box = el('div', { class: 'ed-section' });
+    if (S.mdraft) box.append(el('div', { style: { display: 'flex', gap: '8px' } }, el('button', { type: 'button', class: 'btn pri', id: 'm-finish', onclick: () => { finishPoly(); } }, icon('check', 16, '#fff'), 'Meting afronden'), el('button', { type: 'button', class: 'btn', id: 'm-cancel', onclick: () => { cancelPoly(); drawProps(); } }, 'Annuleren')));
+    box.append(el('h3', null, 'Schaal'));
+    const sc = el('select', { id: 'm-scale', onchange: () => { if (sc.value === 'cal') { setTool('mscale'); return; } S.mscale = { ...S.mscale, ratio: +sc.value, cal: false }; lsSet('pdfstudio-mscale', S.mscale.ratio); applyScaleToAll(); } },
+      SCALES.map(([v, t]) => el('option', { value: v }, t)), S.mscale.cal || !SCALES.some(([v]) => +v === S.mscale.ratio) ? el('option', { value: String(S.mscale.ratio) }, `1:${fmtNum(S.mscale.ratio)} (gekalibreerd)`) : null, el('option', { value: 'cal' }, 'Kalibreren op een gekende maat…'));
+    sc.value = String(S.mscale.ratio);
+    const un = el('select', { id: 'm-unit', onchange: () => { S.mscale = { ...S.mscale, unit: un.value }; lsSet('pdfstudio-munit', un.value); applyScaleToAll(); } }, Object.keys(UNITS).map((u) => el('option', { value: u }, u))); un.value = S.mscale.unit;
+    box.append(el('div', { class: 'row2' }, field('Schaal van het plan', sc), field('Eenheid', un)));
+    const ms = S.objs.filter((o) => o.type === 'measure');
+    if (ms.length) {
+      const KN = { dist: 'Afstand', perim: 'Omtrek', area: 'Oppervlakte' };
+      box.append(el('h3', null, `Metingen (${ms.length})`), el('ul', { class: 'm-list', id: 'm-list' }, ms.map((o) => el('li', { onclick: () => select(o.id) }, el('span', null, `${KN[o.kind]} · p. ${o.page}`), el('strong', null, measureLabel(o))))));
+      const sum = (k) => ms.filter((o) => o.kind === k).reduce((t, o) => t + measureValue(o), 0);
+      const tot = [['dist', S.mscale.unit], ['perim', S.mscale.unit], ['area', S.mscale.unit + '²']].filter(([k]) => ms.some((o) => o.kind === k)).map(([k, u]) => `${KN[k]}: ${fmtNum(sum(k))} ${u}`);
+      box.append(el('div', { class: 'note-box', id: 'm-total' }, 'Totaal — ' + tot.join(' · ')),
+        el('button', { type: 'button', class: 'btn', id: 'm-csv', onclick: () => { const rows = [['Nr', 'Soort', 'Pagina', 'Waarde', 'Eenheid', 'Schaal'].map(tr)].concat(ms.map((o, i) => [i + 1, tr(KN[o.kind]), o.page, measureValue(o).toFixed(4).replace('.', ','), o.kind === 'area' ? o.unit + '²' : o.unit, '1:' + Math.round(o.ratio * 1000) / 1000])); saveFile(baseName(S.file.name) + (document.documentElement.lang === 'en' ? '_measurements.csv' : '_metingen.csv'), new TextEncoder().encode('\ufeff' + rows.map((r) => r.join(';')).join('\r\n'))); } }, icon('download', 16), 'Metingen als CSV'));
+    }
+    return box;
+  }
+  function designPanel() {
+    const box = el('div', { class: 'ed-section' }, el('h3', null, 'Velden'));
+    const fs = S.objs.filter((o) => o.type === 'field');
+    box.append(el('button', { type: 'button', class: 'btn', id: 'fd-auto', onclick: () => autoFields() }, icon('search', 16), 'Invulplaatsen automatisch herkennen'),
+      el('div', { class: 'help' }, `${fs.length} nieuw(e) veld(en)${S.fields.length ? `, ${S.fields.length} bestaand(e)` : ''}. Bij opslaan worden het echte PDF-formuliervelden die in Acrobat, Edge, Chrome en op telefoons invulbaar zijn.`));
+    return box;
+  }
   function formPanel() {
     const box = el('div', { class: 'ed-section' }, el('h3', null, 'Formuliervelden'));
     if (!S.fields.length) { box.append(el('p', { class: 'help' }, 'Deze PDF heeft geen invulbare velden. Gebruik Tekstvak, Datum of Vinkje om tekst op de pagina te zetten.')); return box; }
@@ -553,6 +743,8 @@ function page(app, { topbar, id }) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !inField) { e.preventDefault(); redo(); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel && !inField) { e.preventDefault(); remove(S.sel); }
+    else if (S.mdraft && e.key === 'Enter') { e.preventDefault(); finishPoly(); }
+    else if (S.mdraft && e.key === 'Escape') { cancelPoly(); }
     else if (e.key === 'Escape' && !inField) { select(null); if (S.tool !== 'select') setTool('select'); }
   };
   addEventListener('keydown', onKey);
@@ -563,7 +755,8 @@ function page(app, { topbar, id }) {
     document.activeElement && document.activeElement.blur && document.activeElement.blur();
     saveBtn.disabled = true; const lbl = saveBtn.innerHTML; saveBtn.replaceChildren(el('span', { class: 'spin' }), 'Opslaan…');
     try {
-      let { bytes, removed, overflow } = await buildPdf();
+      let r0; try { r0 = await buildPdf(); } catch (e) { console.warn('verkleind insluiten mislukt, opnieuw met volledige lettertypen', e); setSubset(false); try { r0 = await buildPdf(); } finally { setSubset(true); } }
+      let { bytes, removed, overflow } = r0;
       const bad = await verifyRemoval(bytes, removed);
       if (bad.length) { ({ bytes } = await buildPdf(new Set(bad))); toast(`Op pagina ${bad.join(', ')} kon de tekst niet in het originele lettertype vervangen worden; daar is ze afgedekt en opnieuw geplaatst.`); }
       S.lastRemoved = [...removed].filter((p) => !bad.includes(p));
@@ -609,7 +802,9 @@ function page(app, { topbar, id }) {
       }
       if (S.flattenForm) form.flatten(); else if (Object.keys(S.formVals).length) form.updateFieldAppearances(await font('Helvetica'));
     }
-    const images = new Map();
+    const images = new Map(); const radios = new Map(); let form0 = null; const getForm = () => form0 || (form0 = doc.getForm());
+    // pad in kijkcoördinaten -> PDF (werkt ook op gedraaide pagina's)
+    const pathPdf = (P, cmds) => cmds.map(([c, ...v]) => { const out = [c]; for (let k = 0; k < v.length; k += 2) { const q = P(v[k], v[k + 1]); out.push(q.x.toFixed(2), (-q.y).toFixed(2)); } return out.join(' '); }).join(' ');
     for (const o of S.objs) {
       if (o.type === 'redact') continue;
       if (only != null && o.page !== only) continue;
@@ -633,6 +828,45 @@ function page(app, { topbar, id }) {
         let img = images.get(o.asset); const a = S.assets.get(o.asset);
         if (!img) { img = a.kind === 'png' ? await doc.embedPng(a.bytes) : await doc.embedJpg(a.bytes); images.set(o.asset, img); }
         page.drawImage(img, { x: bl.x, y: bl.y, width: o.w, height: o.h, rotate: rot, opacity: o.opacity ?? 1 });
+      } else if (o.type === 'measure') {
+        const col = hexToRgb(o.color); const pts = o.pts;
+        const cmds = pts.map((q, k) => [k ? 'L' : 'M', ...q]); if (o.kind === 'area') cmds.push(['Z']);
+        if (o.kind === 'area') page.drawSvgPath(pathPdf(P, cmds), { x: 0, y: 0, color: col, opacity: 0.12, borderWidth: 0 });
+        page.drawSvgPath(pathPdf(P, cmds), { x: 0, y: 0, borderColor: col, borderWidth: o.width, borderLineCap: PDFLib.LineCapStyle.Round });
+        if (o.kind === 'dist') { const [a, b] = pts; const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2; for (const [px, py] of pts) page.drawLine({ start: P(px + Math.cos(ang) * 5, py + Math.sin(ang) * 5), end: P(px - Math.cos(ang) * 5, py - Math.sin(ang) * 5), thickness: o.width, color: col }); }
+        const f = await font('Helvetica'); const txt = measureLabel(o).replace(/\u202f|\u00a0/g, ' '); const sz = 9; const tw = f.widthOfTextAtSize(txt, sz); const [lx, ly] = labelPos(o);
+        const bx = lx - tw / 2 - 3, by = ly - sz * 0.7 - 2; const a0 = P(bx, by + sz * 1.4 + 2);
+        page.drawRectangle({ x: a0.x, y: a0.y, width: tw + 6, height: sz * 1.4 + 2, color: PDFLib.rgb(1, 1, 1), opacity: 0.85, rotate: rot });
+        const tp = P(lx - tw / 2, by + sz * 1.1 + 1); page.drawText(txt, { x: tp.x, y: tp.y, size: sz, font: f, color: col, rotate: rot });
+      } else if (o.type === 'stamp') {
+        const col = hexToRgb(o.color); const r = o.h * 0.14, bw = Math.max(1.5, o.h * 0.05); const X = o.x + bw / 2, Y = o.y + bw / 2, W = o.w - bw, H = o.h - bw;
+        const cmds = [['M', X + r, Y], ['L', X + W - r, Y], ['Q', X + W, Y, X + W, Y + r], ['L', X + W, Y + H - r], ['Q', X + W, Y + H, X + W - r, Y + H], ['L', X + r, Y + H], ['Q', X, Y + H, X, Y + H - r], ['L', X, Y + r], ['Q', X, Y, X + r, Y], ['Z']];
+        page.drawSvgPath(pathPdf(P, cmds), { x: 0, y: 0, borderColor: col, borderWidth: bw, opacity: 0.9, borderOpacity: 0.9 });
+        const fb = await font('HelveticaBold'), fr = await font('Helvetica'); const fs = stampFont(o);
+        const main = safeText(fb, o.text || ''); let ms = fs.main; while (ms > 4 && fb.widthOfTextAtSize(main, ms) > o.w * 0.9) ms -= 0.5;
+        const mw = fb.widthOfTextAtSize(main, ms); const baseMain = o.sub ? o.y + o.h * 0.52 : o.y + o.h / 2 + ms * 0.36;
+        let q = P(o.x + (o.w - mw) / 2, baseMain); page.drawText(main, { x: q.x, y: q.y, size: ms, font: fb, color: col, rotate: rot, opacity: 0.9 });
+        if (o.sub) { const sub = safeText(fr, o.sub); let ss = fs.sub; while (ss > 3 && fr.widthOfTextAtSize(sub, ss) > o.w * 0.9) ss -= 0.5; const sw = fr.widthOfTextAtSize(sub, ss); q = P(o.x + (o.w - sw) / 2, o.y + o.h * 0.82); page.drawText(sub, { x: q.x, y: q.y, size: ss, font: fr, color: col, rotate: rot, opacity: 0.9 }); }
+      } else if (o.type === 'field') {
+        const cs = [P(o.x, o.y), P(o.x + o.w, o.y), P(o.x, o.y + o.h), P(o.x + o.w, o.y + o.h)]; const fx = Math.min(...cs.map((c) => c.x)), fy = Math.min(...cs.map((c) => c.y));
+        const box = { x: fx, y: fy, width: Math.max(...cs.map((c) => c.x)) - fx, height: Math.max(...cs.map((c) => c.y)) - fy, borderColor: PDFLib.rgb(0.55, 0.62, 0.66), borderWidth: 0.75, backgroundColor: PDFLib.rgb(0.93, 0.96, 1), rotate: rot };
+        const form = getForm(); let name = o.name; const taken = (n) => { try { form.getField(n); return true; } catch { return false; } };
+        if (o.ftype !== 'fradio' && taken(name)) { let i = 2; while (taken(name + '_' + i)) i++; name = name + '_' + i; }
+        try {
+          if (o.ftype === 'ftext' || o.ftype === 'fmulti' || o.ftype === 'fdate') {
+            const tf = form.createTextField(name); if (o.ftype === 'fmulti') tf.enableMultiline(); if (o.value) tf.setText(o.value); if (o.fontSize) tf.setFontSize(o.fontSize); if (o.required) tf.enableRequired();
+            tf.addToPage(page, box);
+            if (o.ftype === 'fdate') tf.acroField.dict.set(PDFName.of('AA'), ctx.obj({ F: { S: 'JavaScript', JS: PDFString.of('AFDate_FormatEx("dd-mm-yyyy");') }, K: { S: 'JavaScript', JS: PDFString.of('AFDate_KeystrokeEx("dd-mm-yyyy");') } }));
+          } else if (o.ftype === 'fcheck') { const cb = form.createCheckBox(name); cb.addToPage(page, box); if (o.value) cb.check(); if (o.required) cb.enableRequired(); }
+          else if (o.ftype === 'fdrop') { const dd = form.createDropdown(name); dd.addOptions(o.options.split('\n').map((x) => x.trim()).filter(Boolean)); dd.addToPage(page, box); if (o.required) dd.enableRequired(); }
+          else if (o.ftype === 'fradio') { let rg = radios.get(o.group); if (!rg) { try { rg = form.getRadioGroup(o.group); } catch { rg = form.createRadioGroup(o.group); } radios.set(o.group, rg); } rg.addOptionToPage(o.value || 'Keuze', page, box); if (o.required) rg.enableRequired(); }
+          else if (o.ftype === 'fsig') {
+            const w = ctx.obj({ Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFHexString.fromText(name), Rect: [box.x, box.y, box.x + box.width, box.y + box.height], F: 4, P: page.ref, MK: { BC: [0.55, 0.62, 0.66], BG: [0.93, 0.96, 1] } });
+            const W = box.width, H = box.height; const ap = ctx.register(ctx.stream(`q 0.93 0.96 1 rg 0 0 ${W.toFixed(2)} ${H.toFixed(2)} re f 0.55 0.62 0.66 RG 0.75 w 0.38 0.38 ${(W - 0.75).toFixed(2)} ${(H - 0.75).toFixed(2)} re S Q`, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, W, H] }));
+            w.set(PDFName.of('AP'), ctx.obj({ N: ap }));
+            const ref = ctx.register(w); page.node.addAnnot(ref); form.acroForm.addField(ref);
+          }
+        } catch (e) { console.warn('veld', name, e); throw new Error(`Veld "${name}" kon niet gemaakt worden: ${e.message}`); }
       } else if (o.type === 'whiteout') page.drawRectangle({ x: bl.x, y: bl.y, width: o.w, height: o.h, color: PDFLib.rgb(1, 1, 1), rotate: rot });
       else if (o.type === 'highlight') page.drawRectangle({ x: bl.x, y: bl.y, width: o.w, height: o.h, color: hexToRgb(o.color), opacity: o.opacity ?? 0.45, blendMode: BlendMode.Multiply, rotate: rot });
       else if (o.type === 'underline' || o.type === 'strike') { const yy = o.type === 'underline' ? o.y + o.h - 1 : o.y + o.h / 2; page.drawLine({ start: P(o.x, yy), end: P(o.x + o.w, yy), thickness: o.width, color: hexToRgb(o.color) }); }

@@ -3,12 +3,18 @@ import { loadLibs, el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile,
 import { PageGrid } from './grid.js';
 import { startI18n, langSwitch, tr, lang } from './i18n.js';
 const IMPL = {};
-const SOON = new Set(['pdfa', 'pdf-to-word', 'word-to-pdf', 'ocr', 'scan-clean']); // tegels met 'Binnenkort' (modules laden pas op de achtergrond)
+const SOON = new Set([]); // tegels met 'Binnenkort' (modules laden pas op de achtergrond)
 const MODULES = [
   () => import('./tools-organize.js').then((m) => m.ORGANIZE),
   () => import('./tools-optimize.js').then((m) => m.OPTIMIZE),
   () => import('./tools-convert.js').then((m) => m.CONVERT),
-  () => import('./editor.js').then((m) => m.EDIT)
+  () => import('./editor.js').then((m) => m.EDIT),
+  () => import('./tools-pro.js').then((m) => m.PRO),
+  () => import('./tools-ocr.js').then((m) => m.OCR),
+  () => import('./tools-office.js').then((m) => m.OFFICE),
+  () => import('./tools-docx.js').then((m) => m.DOCX),
+  () => import('./tools-pdfa.js').then((m) => m.PDFA),
+  () => import('./tools-misc.js').then((m) => m.MISC)
 ];
 
 // Catalogus (volgorde en teksten zoals het ontwerp "2 · Toolbox")
@@ -21,7 +27,11 @@ const CATALOG = [
     ['edit-draw', 'Tekenen en vormen', 'draw', 'Pijlen, kaders en vrije tekening op de pagina.'],
     ['fill-form', 'Formulier invullen', 'form', 'Bestaande formuliervelden invullen en opslaan.'],
     ['edit-sign', 'Handtekening zetten', 'sign', 'Handtekening of initialen tekenen, typen of uploaden.'],
-    ['edit-redact', 'Permanent redigeren', 'redact', 'Gevoelige inhoud definitief zwart maken en verwijderen.']
+    ['edit-redact', 'Permanent redigeren', 'redact', 'Gevoelige inhoud definitief zwart maken en verwijderen.'],
+    ['edit-measure', 'Meten', 'ruler', 'Afstanden, omtrek en oppervlakte meten op schaal, bv. op plannen.'],
+    ['edit-stamp', 'Stempels', 'stamp', 'Stempels zoals Goedgekeurd, Concept of Voor uitvoering, met naam en datum.'],
+    ['form-design', 'Formulier ontwerpen', 'field', 'Invulvelden, selectievakjes, keuzelijsten en handtekeningvelden toevoegen.'],
+    ['replace-images', 'Afbeeldingen vervangen', 'swap', 'Bestaande afbeeldingen in de PDF vervangen door een andere.']
   ]},
   { title: "Pagina's organiseren", tools: [
     ['merge', "PDF's samenvoegen", 'merge', "Meerdere PDF's of pagina's combineren tot één bestand."],
@@ -31,7 +41,12 @@ const CATALOG = [
     ['organize', "Pagina's ordenen", 'reorder', 'Miniaturen slepen, draaien, verwijderen en lege pagina\'s invoegen.'],
     ['rotate', "Pagina's roteren", 'rotate', "Alle of enkele pagina's 90°, 180° of 270° draaien."],
     ['crop', 'Bijsnijden', 'crop', 'Marges bijsnijden op alle of geselecteerde pagina\'s.'],
-    ['page-numbers', 'Paginanummering', 'number', 'Paginanummers toevoegen met opmaak en positie naar keuze.']
+    ['page-numbers', 'Paginanummering', 'number', 'Paginanummers toevoegen met opmaak en positie naar keuze.'],
+    ['bookmarks', 'Bladwijzers', 'bookmark', 'Inhoudsopgave in de zijbalk maken of aanpassen, ook automatisch uit koppen.'],
+    ['page-labels', 'Paginalabels', 'label', 'Eigen paginanummering in de PDF-lezer, bv. i–iv voor het voorwerk.'],
+    ['bates', 'Bates-nummering', 'bates', 'Doorlopende identificatienummers over meerdere documenten.'],
+    ['insert-pages', "Pagina's invoegen of vervangen", 'insert', "Pagina's uit een ander bestand invoegen of laten vervangen."],
+    ['page-size', 'Paginaformaat wijzigen', 'resize', "Pagina's schalen naar A4, A3, Letter of een eigen formaat."]
   ]},
   { title: 'Optimaliseren en beveiligen', tools: [
     ['compress', 'Comprimeren', 'compress', 'Bestandsgrootte verkleinen door afbeeldingen te optimaliseren.'],
@@ -41,17 +56,27 @@ const CATALOG = [
     ['watermark', 'Watermerk', 'mark', 'Tekstwatermerk plaatsen, bv. "Vertrouwelijk".'],
     ['flatten', 'Platmaken', 'flat', 'Formuliervelden vastzetten in de pagina.'],
     ['header-footer', 'Kop- en voettekst', 'hf', 'Vaste tekst, datum of nummer bovenaan of onderaan elke pagina.'],
+    ['sanitize', 'Verborgen inhoud verwijderen', 'shield', 'Scripts, bijlagen, verborgen lagen en andere verborgen gegevens wissen.'],
+    ['attachments', 'Bijlagen', 'attach', 'Bestanden in een PDF bekijken, toevoegen, eruit halen of verwijderen.'],
+    ['layers', 'Lagen', 'layers', 'Lagen (bv. uit CAD-plannen) tonen, verbergen of verwijderen.'],
     ['pdfa', 'PDF/A omzetten', 'pdfa', 'Archiefversie maken voor langdurige bewaring.']
   ]},
-  { title: 'Converteren en analyseren', tools: [
-    ['pdf-to-word', 'PDF naar Word', 'convert', 'Omzetten naar een bewerkbaar .docx-bestand.'],
-    ['word-to-pdf', 'Word naar PDF', 'convert', 'Documenten uit Word, Excel of PowerPoint omzetten.'],
+  { title: 'Converteren', tools: [
+    ['pdf-to-word', 'PDF naar Word', 'word', 'Omzetten naar een bewerkbaar .docx-bestand.'],
+    ['pdf-to-excel', 'PDF naar Excel', 'table', 'Tabellen omzetten naar een .xlsx-werkblad.'],
+    ['pdf-to-ppt', 'PDF naar PowerPoint', 'slides', 'Elke pagina als dia in een .pptx-presentatie.'],
+    ['Word naar PDF', 'convert', 'Word-documenten (.docx) omzetten naar PDF.'],
     ['images-to-pdf', 'Afbeeldingen naar PDF', 'image', 'JPG- of PNG-bestanden bundelen in één PDF.'],
     ['pdf-to-images', 'PDF naar afbeeldingen', 'image', 'Elke pagina exporteren als PNG of JPG.'],
     ['ocr', 'Tekst herkennen (OCR)', 'ocr', 'Scans doorzoekbaar en selecteerbaar maken.'],
-    ['scan-clean', 'Scan opschonen', 'scan', 'Scheef gescande pagina\'s rechtzetten en ruis verminderen.'],
+    ['scan-clean', 'Scan opschonen', 'scan', 'Scheef gescande pagina\'s rechtzetten en ruis verminderen.']
+  ]},
+  { title: 'Analyseren en automatiseren', tools: [
     ['compare', "PDF's vergelijken", 'compare', 'Twee versies naast elkaar met verschillen gemarkeerd.'],
-    ['search', "Zoeken in meerdere PDF's", 'search', 'Tekst opzoeken in een hele reeks bestanden.']
+    ['search', "Zoeken in meerdere PDF's", 'search', 'Tekst opzoeken in een hele reeks bestanden.'],
+    ['comments-export', 'Opmerkingen exporteren', 'list', 'Alle opmerkingen en markeringen als overzicht, CSV of PDF.'],
+    ['accessibility', 'Toegankelijkheid controleren', 'access', 'Controle op titel, taal, tags, alternatieve tekst en lettertypen.'],
+    ['batch', 'Batchverwerking', 'batch', "Dezelfde bewerkingen op veel PDF's tegelijk uitvoeren."]
   ]}
 ];
 const META = {}; CATALOG.forEach((s) => s.tools.forEach(([id, name, ic, desc]) => META[id] = { id, name, icon: ic, desc }));
@@ -111,10 +136,10 @@ function renderTool(def) {
   document.title = meta.name + ' – PDF Studio';
   const input = { kind: 'pdf', multiple: false, ...def.input };
   const ctx = { def, files: [], opts: {}, grid: null, busy: false };
-  const accept = input.kind === 'image' ? 'image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic' : input.kind === 'pdf+image' ? '.pdf,application/pdf,image/*' : '.pdf,application/pdf';
+  const accept = input.accept || (input.kind === 'image' ? 'image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic' : input.kind === 'pdf+image' ? '.pdf,application/pdf,image/*' : '.pdf,application/pdf');
   const fileIn = el('input', { type: 'file', accept, multiple: input.multiple, class: 'sr', id: 'file-in', 'aria-label': 'Bestanden kiezen' });
   const drop = el('div', { class: 'drop' }, icon('upload', 28, '#1B93A5'),
-    el('span', { style: { fontSize: '15px' } }, input.kind === 'image' ? 'Sleep afbeeldingen hierheen of' : input.multiple ? "Sleep PDF's hierheen of" : 'Sleep een PDF hierheen of'),
+    el('span', { style: { fontSize: '15px' } }, input.label ? input.label : input.kind === 'image' ? 'Sleep afbeeldingen hierheen of' : input.multiple ? "Sleep PDF's hierheen of" : 'Sleep een PDF hierheen of'),
     el('button', { class: 'btn', type: 'button', onclick: () => fileIn.click() }, 'Bestand' + (input.multiple ? 'en' : '') + ' kiezen'),
     el('span', { class: 'hint' }, 'Alles blijft op uw toestel.'), fileIn);
   const listBox = el('div', { class: 'flist' });
@@ -131,7 +156,7 @@ function renderTool(def) {
 
   async function addFiles(fl) {
     let arr = [...fl];
-    const want = input.kind === 'image' ? isImageFile : input.kind === 'pdf+image' ? (f) => isPdfFile(f) || isImageFile(f) : isPdfFile;
+    const want = input.test || (input.kind === 'image' ? isImageFile : input.kind === 'pdf+image' ? (f) => isPdfFile(f) || isImageFile(f) : isPdfFile);
     const bad = arr.filter((f) => !want(f)); arr = arr.filter(want);
     if (bad.length) toast(`${bad.length} bestand(en) overgeslagen: verkeerd bestandstype.`, 'error');
     if (!arr.length) return;
@@ -139,8 +164,10 @@ function renderTool(def) {
     for (const file of arr) {
       const entry = { id: ++fileSeq, file, name: file.name, size: file.size, bytes: await readBytes(file), range: '' };
       try {
-        if (isPdfFile(file)) { entry.kind = 'pdf'; await probePdf(entry, { askPw: !def.noPasswordPrompt }); }
+        if (input.kind === 'docx' || input.kind === 'any') entry.kind = isPdfFile(file) && input.kind === 'any' ? 'pdf' : 'doc';
+        else if (isPdfFile(file)) { entry.kind = 'pdf'; await probePdf(entry, { askPw: !def.noPasswordPrompt }); }
         else entry.kind = 'image';
+        if (entry.kind === 'pdf' && input.kind === 'any') await probePdf(entry, { askPw: !def.noPasswordPrompt });
         ctx.files.push(entry);
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -276,16 +303,17 @@ async function thumbFor(f) {
   if (thumbCache.has(f)) return thumbCache.get(f);
   let c;
   if (f.kind === 'pdf') { const pdf = await openPdfJs(f); c = await renderPage(pdf, 1, { width: 92 }); }
+  else if (f.kind === 'doc') { c = icon('file', 40, '#1B93A5'); }
   else { c = el('img', { src: URL.createObjectURL(f.file), alt: '' }); }
   thumbCache.set(f, c); return c;
 }
 
 // Bestandsnamen van resultaten in de gekozen taal
-const SUF = { bewerkt: 'edited', gesplitst: 'split', extract: 'extract', paginas: 'pages', geordend: 'organised', geroteerd: 'rotated', bijgesneden: 'cropped', genummerd: 'numbered', gecomprimeerd: 'compressed', 'zonder-metadata': 'no-metadata', beveiligd: 'protected', ontgrendeld: 'unlocked', watermerk: 'watermark', plat: 'flattened', 'kop-voet': 'header-footer', afbeeldingen: 'images' };
+const SUF = { bladwijzers: 'bookmarks', aangepast: 'modified', formaat: 'resized', opgeschoond: 'cleaned', bijlagen: 'attachments', lagen: 'layers', opmerkingen: 'comments', toegankelijk: 'accessible', bewerkt: 'edited', gesplitst: 'split', extract: 'extract', paginas: 'pages', geordend: 'organised', geroteerd: 'rotated', bijgesneden: 'cropped', genummerd: 'numbered', gecomprimeerd: 'compressed', 'zonder-metadata': 'no-metadata', beveiligd: 'protected', ontgrendeld: 'unlocked', watermerk: 'watermark', plat: 'flattened', 'kop-voet': 'header-footer', afbeeldingen: 'images' };
 export function outName(n) {
   if (lang() !== 'en' || !n) return n;
-  return n.replace(/_(bewerkt|gesplitst|extract|paginas|geordend|geroteerd|bijgesneden|genummerd|gecomprimeerd|zonder-metadata|beveiligd|ontgrendeld|watermerk|plat|kop-voet|afbeeldingen)((?:\.\w+)?)$/, (m, k, e) => '_' + SUF[k] + e)
-    .replace(/^Geordend\.pdf$/, 'Organised.pdf').replace(/^zoekresultaten_/, 'search-results_');
+  return n.replace(/_(bewerkt|gesplitst|extract|paginas|geordend|geroteerd|bijgesneden|genummerd|gecomprimeerd|zonder-metadata|beveiligd|ontgrendeld|watermerk|plat|kop-voet|afbeeldingen|bladwijzers|aangepast|formaat|opgeschoond|bijlagen|lagen|opmerkingen|toegankelijk)((?:\.\w+)?)$/, (m, k, e) => '_' + SUF[k] + e)
+    .replace(/^Geordend\.pdf$/, 'Organised.pdf').replace(/^zoekresultaten_/, 'search-results_').replace(/^word-naar-pdf/, 'word-to-pdf').replace(/^opgeschoond$/, 'cleaned').replace(/^opmerkingen$/, 'comments');
 }
 
 /* ---------------- Router ---------------- */

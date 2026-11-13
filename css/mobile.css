@@ -8,7 +8,7 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 .ed-obj{touch-action:none}
 .ed-page{touch-action:pan-x pan-y pinch-zoom}
 .ed-textedit .ed-handle,.ed-text .ed-handle{display:none}
-.ed-stage[data-tool=ink] .ed-page,.ed-stage[data-tool=rect] .ed-page,.ed-stage[data-tool=ellipse] .ed-page,.ed-stage[data-tool=arrow] .ed-page,.ed-stage[data-tool=highlight] .ed-page,.ed-stage[data-tool=underline] .ed-page,.ed-stage[data-tool=strike] .ed-page,.ed-stage[data-tool=whiteout] .ed-page,.ed-stage[data-tool=redact] .ed-page,.ed-stage[data-tool=link] .ed-page{touch-action:none}
+.ed-stage[data-tool=ink] .ed-page,.ed-stage[data-tool=rect] .ed-page,.ed-stage[data-tool=ellipse] .ed-page,.ed-stage[data-tool=arrow] .ed-page,.ed-stage[data-tool=highlight] .ed-page,.ed-stage[data-tool=underline] .ed-page,.ed-stage[data-tool=strike] .ed-page,.ed-stage[data-tool=whiteout] .ed-page,.ed-stage[data-tool=redact] .ed-page,.ed-stage[data-tool=link] .ed-page,.ed-stage[data-tool=mdist] .ed-page,.ed-stage[data-tool=mscale] .ed-page,.ed-stage[data-tool=ftext] .ed-page,.ed-stage[data-tool=fmulti] .ed-page,.ed-stage[data-tool=fdrop] .ed-page,.ed-stage[data-tool=fdate] .ed-page,.ed-stage[data-tool=fsig] .ed-page{touch-action:none}
 .ed-sheet-handle{display:none}
 .pg .acts .mv{display:none}
 

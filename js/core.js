@@ -20,7 +20,11 @@ export function loadLibs() {
 function tunePdfLib(L) {
   const D = L.PDFDocument; const load0 = D.load.bind(D); const save0 = D.prototype.save;
   D.load = (bytes, o = {}) => load0(bytes, { parseSpeed: 2000, ...o });
-  D.prototype.save = function (o = {}) { return save0.call(this, { objectsPerTick: 1500, ...o }); };
+  D.prototype.save = function (o = {}) {
+    // een ingesloten, verkleind lettertype zonder één gebruikt teken krijgt anders een ongeldige breedtetabel (W [[]])
+    for (const f of this.fonts || []) { const e = f.embedder; if (e && e.subset && Array.isArray(e.glyphs) && typeof e.computeWidths === 'function' && !e._wFix) { const cw = e.computeWidths; e.computeWidths = function () { return this.glyphs.filter(Boolean).length ? cw.call(this) : []; }; e._wFix = true; } }
+    return save0.call(this, { objectsPerTick: 1500, ...o });
+  };
 }
 if (PDFLib) tunePdfLib(PDFLib);
 
@@ -44,6 +48,7 @@ export function el(tag, attrs, ...kids) {
 }
 
 export const ICONS = {
+  bookmark:'M6 3h12v18l-6-4-6 4z', label:'M3 12l9-9h8v8l-9 9zM15 8h.01', bates:'M9 4L7 20M17 4l-2 16M4 9h16M3 15h16', indent:'M4 6h16M10 12h10M10 18h10M4 10l3 3-3 3', outdent:'M4 6h16M10 12h10M10 18h10M7 10l-3 3 3 3', ruler:'M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2', stamp:'M9 4h6l-1 7h4l2 5H4l2-5h4zM4 20h16', field:'M3 7h18v10H3zM7 10v4M6 10h2M6 14h2', attach:'M8 12l6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l7-7', layers:'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5', swap:'M4 5h10v8H4zM10 11h10v8H10z', shield:'M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6zM9 12l2 2 4-4', insert:'M7 3h8l4 4v14H7zM15 3v4h4M13 11v6M10 14h6', resize:'M4 4h7M4 4v7M20 20h-7M20 20v-7M4 4l7 7M20 20l-7-7', list:'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', access:'M12 4a1.5 1.5 0 1 0 0 .01M5 8l7 1 7-1M12 9v5l-3 6M12 14l3 6', batch:'M4 8h12v12H4zM8 4h12v12', table:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14M15 5v14', slides:'M3 4h18v12H3zM12 16v4M8 20h8', word:'M7 3h8l4 4v14H7zM15 3v4h4M9 12l1.5 5 1.5-4 1.5 4 1.5-5', dist:'M3 12h18M3 8v8M21 8v8', perim:'M4 18l4-12 8 2 4 10z', area:'M4 18l4-12 8 2 4 10zM8 14h8M9 10h6', scale:'M3 17h18M5 17v-3M9 17v-5M13 17v-3M17 17v-5M21 17v-3', radio:'M12 12h.01M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16', drop:'M3 7h18v10H3zM15 11l2 2 2-2', sigfield:'M3 7h18v10H3zM6 14c1 0 2-4 3-4s1 3 2 3 2-2 3-2',
   text:'M4 7V4h16v3M12 4v16M9 20h6', image:'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M9 8h.01',
   link:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   comment:'M4 5h16v11H9l-5 4z', draw:'M4 20l4-1 11-11-3-3L5 16zM14 6l3 3', form:'M5 4h14v16H5zM8 9h8M8 13h8M8 17h4',
@@ -257,9 +262,9 @@ export function openPdfJs(entry) {
   if (!entry._pdfjs) entry._pdfjs = loadLibs().then(() => pdfjsLib.getDocument({ ...PDFJS_OPTS, data: entry.bytes.slice(), password: entry.password || undefined }).promise);
   return entry._pdfjs;
 }
-export async function bytesToPdfJs(bytes, password) {
+export async function bytesToPdfJs(bytes, password, extra = {}) {
   await loadLibs();
-  return pdfjsLib.getDocument({ ...PDFJS_OPTS, data: bytes.slice(), password }).promise;
+  return pdfjsLib.getDocument({ ...PDFJS_OPTS, ...extra, data: bytes.slice(), password }).promise;
 }
 export async function renderPage(pdf, num, { width, scale, rotation = 0, canvas } = {}) {
   const page = await pdf.getPage(num);

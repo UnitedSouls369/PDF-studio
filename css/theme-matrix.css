@@ -19,7 +19,7 @@ a{color:var(--g)}
 /* oppervlakken */
 .top,.tile,.tool aside,.drop,.fitem,.fitem .th,.seg button,.posgrid button,.result .out,.pg,.pg .acts button,.modal,
 .mtable,.cpage,.hfile,.ed-tabs,.ed-ribbon,.ed-tool,.ed-thumbs,.ed-th,.ed-props,.ed-sheet-handle,.field input[type=text],.field input[type=number],
-.field input[type=password],.field select,.field textarea,.field input[type=color],.hero input,.fitem .rng input,#sel-range{background:var(--k1)!important;color:var(--ink)}
+.field input[type=password],.field select,.field textarea,.field input[type=color],.hero input,.fitem .rng input,#sel-range,.bm-row input,.bm-add input{background:var(--k1)!important;color:var(--ink)}
 .top{border-bottom-color:var(--ln);box-shadow:0 1px 0 rgba(0,255,65,.15)}
 .top .app{color:var(--g)}
 .tile{border-color:var(--ln)}

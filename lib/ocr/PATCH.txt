@@ -1,0 +1,1 @@
+Patch: worker.min.js initialize() gebruikt t.code i.p.v. t.data (fout in tesseract.js 5.1.1 bij talen als {code,data}).

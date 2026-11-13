@@ -219,6 +219,18 @@ function matchShows(shows, it) {
   return shows.filter((sh) => Math.abs(sh.y - it.base) <= tolY && sh.x >= it.x - 1.5 && sh.x <= it.x + it.w - 0.5);
 }
 let fontkitP;
+// Insluiten met de fontkit-versie die lettertypen verkleint (alleen gebruikte tekens). Valt terug op volledig insluiten.
+let SUBSET = true; let subsetP;
+export const setSubset = (v) => { SUBSET = !!v; };
+function ensureSubsetFontkit() {
+  return subsetP || (subsetP = new Promise((res, rej) => { if (window.fontkitCantoo) return res(window.fontkitCantoo); const s = document.createElement('script'); s.src = BASE + 'lib/fontkit-subset.js'; s.onload = () => res(window.fontkitCantoo); s.onerror = () => { subsetP = null; rej(new Error('fontkit')); }; document.head.append(s); }));
+}
+async function registerFk(doc) {
+  if (doc._fkRegistered) return;
+  let fk = null; if (SUBSET) { try { fk = await ensureSubsetFontkit(); } catch {} }
+  doc.registerFontkit(fk || await ensureFontkit()); doc._fkRegistered = true; doc._fkSubset = !!fk;
+}
+const embedOpts = (doc) => (doc._fkSubset ? { subset: true, features: { liga: false, rlig: false, clig: false, dlig: false, calt: false } } : { subset: false });
 export function ensureFontkit() {
   if (!fontkitP) fontkitP = window.fontkit ? Promise.resolve(window.fontkit) : new Promise((res, rej) => { const s = document.createElement('script'); s.src = BASE + 'lib/fontkit.min.js'; s.onload = () => res(window.fontkit); s.onerror = () => rej(new Error('fontkit niet geladen')); document.head.append(s); });
   return fontkitP;
@@ -314,8 +326,8 @@ async function buildEditBlock(doc, a, page, e, first, dVp, vpT, docFonts) {
 async function embedSpec(doc, page, spec, docFonts) {
   let entry = docFonts.get(spec.key);
   if (!entry) {
-    const fk = await ensureFontkit(); if (!doc._fkRegistered) { doc.registerFontkit(fk); doc._fkRegistered = true; }
-    let font = null; try { font = await doc.embedFont(await spec.load(), { subset: false }); } catch (err) { console.warn('lettertype', spec.label, err); }
+    await registerFk(doc);
+    let font = null; try { font = await doc.embedFont(await spec.load(), embedOpts(doc)); } catch (err) { console.warn('lettertype', spec.label, err); }
     entry = { font, pages: new Map(), fk: font && font.embedder && font.embedder.font }; docFonts.set(spec.key, entry);
   }
   if (!entry.font) return null;
@@ -387,7 +399,7 @@ async function glyphsOfEdit(doc, a, page, e, first, docFonts) {
 // Reserve voor de afdek-route (als de paginacode niet aangepast kan worden)
 export async function embedFallbackFont(doc, fam, bold, italic, docFonts, baseHint) {
   const specs = await candidates({ base: baseHint || '', uiFamily: baseHint ? null : fam, weight: bold ? 700 : 400, italic, serif: fam === 'Times', mono: fam === 'Courier' });
-  for (const spec of specs) { let entry = docFonts.get(spec.key); if (!entry) { const fk = await ensureFontkit(); if (!doc._fkRegistered) { doc.registerFontkit(fk); doc._fkRegistered = true; } let font = null; try { font = await doc.embedFont(await spec.load(), { subset: false }); } catch {} entry = { font, pages: new Map() }; docFonts.set(spec.key, entry); } if (entry.font) return entry.font; }
+  for (const spec of specs) { let entry = docFonts.get(spec.key); if (!entry) { await registerFk(doc); let font = null; try { font = await doc.embedFont(await spec.load(), embedOpts(doc)); } catch {} entry = { font, pages: new Map() }; docFonts.set(spec.key, entry); } if (entry.font) return entry.font; }
   throw new Error('geen lettertype beschikbaar');
 }
 

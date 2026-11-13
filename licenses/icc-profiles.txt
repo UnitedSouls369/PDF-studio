@@ -1,0 +1,1 @@
+sRGB.icc en FOGRA39L_coated.icc: uit TeX Live colorprofiles (vrij te verspreiden profielen, zie colorprofiles.sty)

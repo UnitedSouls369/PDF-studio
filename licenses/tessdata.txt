@@ -1,0 +1,1 @@
+Tesseract OCR traineddata (tessdata_best_int, nld/eng/fra/deu) - Apache License 2.0 - https://github.com/tesseract-ocr/tessdata_best

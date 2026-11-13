@@ -9,9 +9,11 @@
     if (e.data.type === 'fonts-done') st.fonts = { complete: true, total: e.data.total };
     paint();
   });
-  async function fontList() { const m = await (await fetch('lib/fonts/fonts.json')).json(); return [...new Set(Object.values(m).flatMap((f) => Object.values(f)))]; }
+  const EXTRA = ['lib/ocr/tesseract-core-simd-lstm.wasm.js', 'lib/ocr/tesseract-core-lstm.wasm.js', 'lib/ocr/lang/nld.js', 'lib/ocr/lang/eng.js', 'lib/ocr/lang/fra.js', 'lib/ocr/lang/deu.js'];
+  async function fontList() { const m = await (await fetch('lib/fonts/fonts.json')).json(); return [...new Set(Object.values(m).flatMap((f) => Object.values(f)))].concat(EXTRA); }
+  const cacheUrl = (f) => (f.includes('/') ? './' + f : './lib/fonts/' + f);
   async function checkFonts() {
-    try { const files = await fontList(); const c = await caches.open('pdfstudio-fonts-v1'); let n = 0; for (const f of files) if (await c.match('./lib/fonts/' + f)) n++; if (!st.fonts || !st.fonts.busy) st.fonts = n === files.length ? { complete: true, total: n } : { done: n, total: files.length }; paint(); } catch {}
+    try { const files = await fontList(); const c = await caches.open('pdfstudio-fonts-v1'); let n = 0; for (const f of files) if (await c.match(cacheUrl(f))) n++; if (!st.fonts || !st.fonts.busy) st.fonts = n === files.length ? { complete: true, total: n } : { done: n, total: files.length }; paint(); } catch {}
   }
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -22,8 +24,8 @@
     if (st.ready) slot.append(mk('span', 'ok', 'Werkt offline'));
     if (st.fonts && !st.fonts.complete) {
       if (st.fonts.busy) slot.append(mk('span', null, `Lettertypes bewaren… ${st.fonts.done}/${st.fonts.total}`));
-      else { const b = mk('button', 'btn sm', 'Alle lettertypes offline bewaren (± 95 MB)'); b.type = 'button'; b.id = 'cache-fonts'; b.onclick = async () => { st.fonts = { busy: true, done: 0, total: 0 }; paint(); const reg = await navigator.serviceWorker.ready; reg.active.postMessage({ type: 'cache-fonts', files: await fontList() }); }; slot.append(b); }
-    } else if (st.fonts && st.fonts.complete) slot.append(mk('span', 'ok', 'Alle lettertypes offline'));
+      else { const b = mk('button', 'btn sm', 'Lettertypes en OCR offline bewaren (± 115 MB)'); b.type = 'button'; b.id = 'cache-fonts'; b.onclick = async () => { st.fonts = { busy: true, done: 0, total: 0 }; paint(); const reg = await navigator.serviceWorker.ready; reg.active.postMessage({ type: 'cache-fonts', files: await fontList() }); }; slot.append(b); }
+    } else if (st.fonts && st.fonts.complete) slot.append(mk('span', 'ok', 'Lettertypes en OCR offline'));
     if (deferred && !standalone) { const b = mk('button', 'btn sm', 'Installeren als app'); b.type = 'button'; b.onclick = async () => { deferred.prompt(); await deferred.userChoice; deferred = null; paint(); }; slot.append(b); }
     else if (ios && !standalone) slot.append(mk('span', null, 'iPhone/iPad: tik op Deel → "Zet op beginscherm" om te installeren.'));
   }
