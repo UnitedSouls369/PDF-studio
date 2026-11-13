@@ -1,0 +1,2 @@
+Poppins — SIL Open Font License 1.1 (zie de OFL-tekst in google-fonts/open-sans.txt).
+Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).

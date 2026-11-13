@@ -1,0 +1,404 @@
+{
+"Roboto": {
+"700": "Roboto-700.ttf",
+"300i": "Roboto-300i.ttf",
+"400i": "Roboto-400i.ttf",
+"300": "Roboto-300.ttf",
+"600": "Roboto-600.ttf",
+"800": "Roboto-800.ttf",
+"600i": "Roboto-600i.ttf",
+"500": "Roboto-500.ttf",
+"700i": "Roboto-700i.ttf",
+"800i": "Roboto-800i.ttf",
+"400": "Roboto-400.ttf",
+"500i": "Roboto-500i.ttf"
+},
+"Open Sans": {
+"700": "OpenSans-700.ttf",
+"300i": "OpenSans-300i.ttf",
+"400i": "OpenSans-400i.ttf",
+"300": "OpenSans-300.ttf",
+"600": "OpenSans-600.ttf",
+"800": "OpenSans-800.ttf",
+"600i": "OpenSans-600i.ttf",
+"500": "OpenSans-500.ttf",
+"700i": "OpenSans-700i.ttf",
+"800i": "OpenSans-800i.ttf",
+"400": "OpenSans-400.ttf",
+"500i": "OpenSans-500i.ttf"
+},
+"Lato": {
+"700": "Lato-700.ttf",
+"300i": "Lato-300i.ttf",
+"400i": "Lato-400i.ttf",
+"300": "Lato-300.ttf",
+"700i": "Lato-700i.ttf",
+"400": "Lato-400.ttf"
+},
+"Montserrat": {
+"700": "Montserrat-700.ttf",
+"300i": "Montserrat-300i.ttf",
+"400i": "Montserrat-400i.ttf",
+"300": "Montserrat-300.ttf",
+"600": "Montserrat-600.ttf",
+"800": "Montserrat-800.ttf",
+"600i": "Montserrat-600i.ttf",
+"500": "Montserrat-500.ttf",
+"700i": "Montserrat-700i.ttf",
+"800i": "Montserrat-800i.ttf",
+"400": "Montserrat-400.ttf",
+"500i": "Montserrat-500i.ttf"
+},
+"Source Sans 3": {
+"700": "SourceSans3-700.ttf",
+"300i": "SourceSans3-300i.ttf",
+"400i": "SourceSans3-400i.ttf",
+"300": "SourceSans3-300.ttf",
+"600": "SourceSans3-600.ttf",
+"800": "SourceSans3-800.ttf",
+"600i": "SourceSans3-600i.ttf",
+"500": "SourceSans3-500.ttf",
+"700i": "SourceSans3-700i.ttf",
+"800i": "SourceSans3-800i.ttf",
+"400": "SourceSans3-400.ttf",
+"500i": "SourceSans3-500i.ttf"
+},
+"Noto Sans": {
+"700": "NotoSans-700.ttf",
+"300i": "NotoSans-300i.ttf",
+"400i": "NotoSans-400i.ttf",
+"300": "NotoSans-300.ttf",
+"600": "NotoSans-600.ttf",
+"800": "NotoSans-800.ttf",
+"600i": "NotoSans-600i.ttf",
+"500": "NotoSans-500.ttf",
+"700i": "NotoSans-700i.ttf",
+"800i": "NotoSans-800i.ttf",
+"400": "NotoSans-400.ttf",
+"500i": "NotoSans-500i.ttf"
+},
+"Noto Serif": {
+"700": "NotoSerif-700.ttf",
+"300i": "NotoSerif-300i.ttf",
+"400i": "NotoSerif-400i.ttf",
+"300": "NotoSerif-300.ttf",
+"600": "NotoSerif-600.ttf",
+"800": "NotoSerif-800.ttf",
+"600i": "NotoSerif-600i.ttf",
+"500": "NotoSerif-500.ttf",
+"700i": "NotoSerif-700i.ttf",
+"800i": "NotoSerif-800i.ttf",
+"400": "NotoSerif-400.ttf",
+"500i": "NotoSerif-500i.ttf"
+},
+"Gelasio": {
+"700": "Gelasio-700.ttf",
+"400i": "Gelasio-400i.ttf",
+"600": "Gelasio-600.ttf",
+"600i": "Gelasio-600i.ttf",
+"500": "Gelasio-500.ttf",
+"700i": "Gelasio-700i.ttf",
+"400": "Gelasio-400.ttf",
+"500i": "Gelasio-500i.ttf"
+},
+"EB Garamond": {
+"700": "EBGaramond-700.ttf",
+"400i": "EBGaramond-400i.ttf",
+"600": "EBGaramond-600.ttf",
+"800": "EBGaramond-800.ttf",
+"600i": "EBGaramond-600i.ttf",
+"500": "EBGaramond-500.ttf",
+"700i": "EBGaramond-700i.ttf",
+"800i": "EBGaramond-800i.ttf",
+"400": "EBGaramond-400.ttf",
+"500i": "EBGaramond-500i.ttf"
+},
+"PT Sans": {
+"700": "PTSans-700.ttf",
+"400i": "PTSans-400i.ttf",
+"700i": "PTSans-700i.ttf",
+"400": "PTSans-400.ttf"
+},
+"PT Serif": {
+"700": "PTSerif-700.ttf",
+"400i": "PTSerif-400i.ttf",
+"700i": "PTSerif-700i.ttf",
+"400": "PTSerif-400.ttf"
+},
+"Raleway": {
+"700": "Raleway-700.ttf",
+"300i": "Raleway-300i.ttf",
+"400i": "Raleway-400i.ttf",
+"300": "Raleway-300.ttf",
+"600": "Raleway-600.ttf",
+"800": "Raleway-800.ttf",
+"600i": "Raleway-600i.ttf",
+"500": "Raleway-500.ttf",
+"700i": "Raleway-700i.ttf",
+"800i": "Raleway-800i.ttf",
+"400": "Raleway-400.ttf",
+"500i": "Raleway-500i.ttf"
+},
+"Nunito Sans": {
+"700": "NunitoSans-700.ttf",
+"300i": "NunitoSans-300i.ttf",
+"400i": "NunitoSans-400i.ttf",
+"300": "NunitoSans-300.ttf",
+"600": "NunitoSans-600.ttf",
+"800": "NunitoSans-800.ttf",
+"600i": "NunitoSans-600i.ttf",
+"500": "NunitoSans-500.ttf",
+"700i": "NunitoSans-700i.ttf",
+"800i": "NunitoSans-800i.ttf",
+"400": "NunitoSans-400.ttf",
+"500i": "NunitoSans-500i.ttf"
+},
+"Arimo": {
+"700": "Arimo-700.ttf",
+"400i": "Arimo-400i.ttf",
+"600": "Arimo-600.ttf",
+"600i": "Arimo-600i.ttf",
+"500": "Arimo-500.ttf",
+"700i": "Arimo-700i.ttf",
+"400": "Arimo-400.ttf",
+"500i": "Arimo-500i.ttf"
+},
+"Tinos": {
+"700": "Tinos-700.ttf",
+"400i": "Tinos-400i.ttf",
+"700i": "Tinos-700i.ttf",
+"400": "Tinos-400.ttf"
+},
+"Cousine": {
+"700": "Cousine-700.ttf",
+"400i": "Cousine-400i.ttf",
+"700i": "Cousine-700i.ttf",
+"400": "Cousine-400.ttf"
+},
+"Ubuntu": {
+"700": "Ubuntu-700.ttf",
+"300i": "Ubuntu-300i.ttf",
+"400i": "Ubuntu-400i.ttf",
+"300": "Ubuntu-300.ttf",
+"500": "Ubuntu-500.ttf",
+"700i": "Ubuntu-700i.ttf",
+"400": "Ubuntu-400.ttf",
+"500i": "Ubuntu-500i.ttf"
+},
+"Merriweather": {
+"700": "Merriweather-700.ttf",
+"300i": "Merriweather-300i.ttf",
+"400i": "Merriweather-400i.ttf",
+"300": "Merriweather-300.ttf",
+"600": "Merriweather-600.ttf",
+"800": "Merriweather-800.ttf",
+"600i": "Merriweather-600i.ttf",
+"500": "Merriweather-500.ttf",
+"700i": "Merriweather-700i.ttf",
+"800i": "Merriweather-800i.ttf",
+"400": "Merriweather-400.ttf",
+"500i": "Merriweather-500i.ttf"
+},
+"Playfair Display": {
+"700": "PlayfairDisplay-700.ttf",
+"400i": "PlayfairDisplay-400i.ttf",
+"600": "PlayfairDisplay-600.ttf",
+"800": "PlayfairDisplay-800.ttf",
+"600i": "PlayfairDisplay-600i.ttf",
+"500": "PlayfairDisplay-500.ttf",
+"700i": "PlayfairDisplay-700i.ttf",
+"800i": "PlayfairDisplay-800i.ttf",
+"400": "PlayfairDisplay-400.ttf",
+"500i": "PlayfairDisplay-500i.ttf"
+},
+"Work Sans": {
+"700": "WorkSans-700.ttf",
+"300i": "WorkSans-300i.ttf",
+"400i": "WorkSans-400i.ttf",
+"300": "WorkSans-300.ttf",
+"600": "WorkSans-600.ttf",
+"800": "WorkSans-800.ttf",
+"600i": "WorkSans-600i.ttf",
+"500": "WorkSans-500.ttf",
+"700i": "WorkSans-700i.ttf",
+"800i": "WorkSans-800i.ttf",
+"400": "WorkSans-400.ttf",
+"500i": "WorkSans-500i.ttf"
+},
+"Fira Sans": {
+"700": "FiraSans-700.ttf",
+"300i": "FiraSans-300i.ttf",
+"400i": "FiraSans-400i.ttf",
+"300": "FiraSans-300.ttf",
+"600": "FiraSans-600.ttf",
+"800": "FiraSans-800.ttf",
+"600i": "FiraSans-600i.ttf",
+"500": "FiraSans-500.ttf",
+"700i": "FiraSans-700i.ttf",
+"800i": "FiraSans-800i.ttf",
+"400": "FiraSans-400.ttf",
+"500i": "FiraSans-500i.ttf"
+},
+"IBM Plex Sans": {
+"700": "IBMPlexSans-700.ttf",
+"300i": "IBMPlexSans-300i.ttf",
+"400i": "IBMPlexSans-400i.ttf",
+"300": "IBMPlexSans-300.ttf",
+"600": "IBMPlexSans-600.ttf",
+"600i": "IBMPlexSans-600i.ttf",
+"500": "IBMPlexSans-500.ttf",
+"700i": "IBMPlexSans-700i.ttf",
+"400": "IBMPlexSans-400.ttf",
+"500i": "IBMPlexSans-500i.ttf"
+},
+"Titillium Web": {
+"700": "TitilliumWeb-700.ttf",
+"300i": "TitilliumWeb-300i.ttf",
+"400i": "TitilliumWeb-400i.ttf",
+"300": "TitilliumWeb-300.ttf",
+"600": "TitilliumWeb-600.ttf",
+"600i": "TitilliumWeb-600i.ttf",
+"700i": "TitilliumWeb-700i.ttf",
+"400": "TitilliumWeb-400.ttf"
+},
+"Oswald": {
+"700": "Oswald-700.ttf",
+"300": "Oswald-300.ttf",
+"600": "Oswald-600.ttf",
+"500": "Oswald-500.ttf",
+"400": "Oswald-400.ttf"
+},
+"Liberation Sans": {
+"400": "LiberationSans-400.ttf",
+"700": "LiberationSans-700.ttf",
+"400i": "LiberationSans-400i.ttf",
+"700i": "LiberationSans-700i.ttf"
+},
+"Liberation Serif": {
+"400": "LiberationSerif-400.ttf",
+"700": "LiberationSerif-700.ttf",
+"400i": "LiberationSerif-400i.ttf",
+"700i": "LiberationSerif-700i.ttf"
+},
+"Liberation Mono": {
+"400": "LiberationMono-400.ttf",
+"700": "LiberationMono-700.ttf",
+"400i": "LiberationMono-400i.ttf",
+"700i": "LiberationMono-700i.ttf"
+},
+"Carlito": {
+"400": "Carlito-400.ttf",
+"700": "Carlito-700.ttf",
+"400i": "Carlito-400i.ttf",
+"700i": "Carlito-700i.ttf"
+},
+"Caladea": {
+"400": "Caladea-400.ttf",
+"700": "Caladea-700.ttf",
+"400i": "Caladea-400i.ttf",
+"700i": "Caladea-700i.ttf"
+},
+"DejaVu Sans": {
+"400": "DejaVuSans-400.ttf",
+"700": "DejaVuSans-700.ttf",
+"400i": "DejaVuSans-400i.ttf",
+"700i": "DejaVuSans-700i.ttf"
+},
+"DejaVu Serif": {
+"400": "DejaVuSerif-400.ttf",
+"700": "DejaVuSerif-700.ttf",
+"400i": "DejaVuSerif-400i.ttf",
+"700i": "DejaVuSerif-700i.ttf"
+},
+"DejaVu Sans Mono": {
+"400": "DejaVuSansMono-400.ttf",
+"700": "DejaVuSansMono-700.ttf",
+"400i": "DejaVuSansMono-400i.ttf",
+"700i": "DejaVuSansMono-700i.ttf"
+},
+"Poppins": {
+"300": "Poppins-300.ttf",
+"300i": "Poppins-300i.ttf",
+"400": "Poppins-400.ttf",
+"400i": "Poppins-400i.ttf",
+"500": "Poppins-500.ttf",
+"500i": "Poppins-500i.ttf",
+"700": "Poppins-700.ttf",
+"700i": "Poppins-700i.ttf"
+},
+"Inter": {
+"300": "Inter-300.otf",
+"300i": "Inter-300i.otf",
+"400": "Inter-400.otf",
+"400i": "Inter-400i.otf",
+"500": "Inter-500.otf",
+"500i": "Inter-500i.otf",
+"600": "Inter-600.otf",
+"600i": "Inter-600i.otf",
+"700": "Inter-700.otf",
+"700i": "Inter-700i.otf",
+"800": "Inter-800.otf",
+"800i": "Inter-800i.otf"
+},
+"TeX Gyre Heros": {
+"400": "TeXGyreHeros-400.otf",
+"700": "TeXGyreHeros-700.otf",
+"400i": "TeXGyreHeros-400i.otf",
+"700i": "TeXGyreHeros-700i.otf"
+},
+"TeX Gyre Termes": {
+"400": "TeXGyreTermes-400.otf",
+"700": "TeXGyreTermes-700.otf",
+"400i": "TeXGyreTermes-400i.otf",
+"700i": "TeXGyreTermes-700i.otf"
+},
+"TeX Gyre Cursor": {
+"400": "TeXGyreCursor-400.otf",
+"700": "TeXGyreCursor-700.otf",
+"400i": "TeXGyreCursor-400i.otf",
+"700i": "TeXGyreCursor-700i.otf"
+},
+"TeX Gyre Pagella": {
+"400": "TeXGyrePagella-400.otf",
+"700": "TeXGyrePagella-700.otf",
+"400i": "TeXGyrePagella-400i.otf",
+"700i": "TeXGyrePagella-700i.otf"
+},
+"TeX Gyre Bonum": {
+"400": "TeXGyreBonum-400.otf",
+"700": "TeXGyreBonum-700.otf",
+"400i": "TeXGyreBonum-400i.otf",
+"700i": "TeXGyreBonum-700i.otf"
+},
+"TeX Gyre Schola": {
+"400": "TeXGyreSchola-400.otf",
+"700": "TeXGyreSchola-700.otf",
+"400i": "TeXGyreSchola-400i.otf",
+"700i": "TeXGyreSchola-700i.otf"
+},
+"TeX Gyre Adventor": {
+"400": "TeXGyreAdventor-400.otf",
+"700": "TeXGyreAdventor-700.otf",
+"400i": "TeXGyreAdventor-400i.otf",
+"700i": "TeXGyreAdventor-700i.otf"
+},
+"Latin Modern Roman": {
+"400": "LatinModernRoman-400.otf",
+"700": "LatinModernRoman-700.otf",
+"400i": "LatinModernRoman-400i.otf",
+"700i": "LatinModernRoman-700i.otf"
+},
+"Latin Modern Sans": {
+"400": "LatinModernSans-400.otf",
+"700": "LatinModernSans-700.otf",
+"400i": "LatinModernSans-400i.otf",
+"700i": "LatinModernSans-700i.otf"
+},
+"Latin Modern Mono": {
+"400": "LatinModernMono-400.otf",
+"400i": "LatinModernMono-400i.otf"
+},
+"TeX Gyre Chorus": {
+"400i": "TeXGyreChorus-400i.otf"
+}
+}

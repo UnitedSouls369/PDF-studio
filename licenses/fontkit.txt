@@ -1,0 +1,5 @@
+fontkit (@pdf-lib/fontkit) — MIT-licentie.
+Copyright (c) 2014-2021 Devon Govett en bijdragers.
+Zie https://github.com/Hopding/fontkit
+
+De MIT-licentie staat toe de software te gebruiken, kopiëren, wijzigen en verspreiden, mits deze vermelding behouden blijft.
