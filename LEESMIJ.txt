@@ -1,106 +1,24 @@
-PDF Studio — gratis PDF-gereedschap dat volledig offline werkt
-=================================================================
+ABN PDF Studio - update: tekstvak verplaatsen, handtekeningen bewaren, handtekening uit afbeelding
+=================================================================================================
 
-Alles gebeurt op uw eigen toestel. Er worden nooit bestanden verstuurd.
-U heeft geen account en geen internet nodig.
+Deze map bevat de 3 bestanden die gewijzigd zijn ten opzichte van de vorige versie:
+  js/editor.js    (verplaatsgreep voor tekstvakken, nieuw handtekeningvenster)
+  js/i18n.js      (Engelse vertalingen voor de nieuwe teksten)
+  css/app.css     (opmaak van de greep en het handtekeningvenster)
 
+Installeren in de Offline PDF Studio
+1. Sluit de app en maak een kopie van uw bestaande map (voor de zekerheid).
+2. Kopieer de mappen js en css uit deze zip over de gelijknamige mappen van de Offline PDF Studio
+   en kies "Bestanden in de doelmap vervangen".
+3. Start de app opnieuw. Is ze als app geinstalleerd (PWA) of staat er een service worker in, verwijder
+   dan de oude cache of installeer opnieuw, of druk Ctrl+F5.
 
-1. OP EEN COMPUTER (uit deze ZIP)
----------------------------------
-Pak de ZIP volledig uit (niet openen vanuit de ZIP zelf) en dubbelklik:
+Let op: de 3 bestanden vervangen de oude volledig. Heeft uw offline versie eigen aanpassingen in
+js/editor.js, js/i18n.js of css/app.css, dan gaan die verloren. Laat het weten, dan voeg ik ze samen.
 
-  Windows ........ "Start PDF Studio (Windows).bat"
-  Mac ............ "Start PDF Studio (Mac).command"
-                   (eerste keer: rechtsklik > Open, omdat het niet uit de App Store komt)
-  Linux .......... "Start PDF Studio (Linux).sh"
-
-Er opent een zwart venster en daarna uw browser. Laat het zwarte venster open
-zolang u PDF Studio gebruikt; sluiten = stoppen. Er wordt niets geïnstalleerd en
-er zijn geen beheerdersrechten nodig. De tool is alleen bereikbaar op uw eigen
-computer (localhost), niet vanaf het netwerk.
-
-Waarom niet gewoon index.html openen? Browsers blokkeren dan onderdelen
-(lettertypes, PDF-weergave). Het startbestand lost dat op.
-
-Tip: in Chrome of Edge verschijnt in de adresbalk "App installeren". Dan krijgt
-PDF Studio een eigen icoon en venster.
-
-
-2. OP SMARTPHONE OF TABLET (Android, GrapheneOS, iPhone, iPad)
---------------------------------------------------------------
-Telefoons kunnen geen startbestand uitvoeren. Daarom gebruikt u PDF Studio daar
-als web-app: één keer openen via internet, op het beginscherm zetten, daarna
-werkt hij volledig offline (ook in vliegtuigmodus).
-
-Stap A — de web-app één keer online zetten (gratis, ±10 minuten, via een computer)
-  1. Maak een gratis account op https://github.com
-  2. Klik op "New repository", naam bv. "pdf-studio", kies "Public", klik "Create".
-  3. Klik "uploading an existing file" en sleep de INHOUD van deze map erin
-     (alle bestanden en mappen, niet de ZIP zelf). Klik "Commit changes".
-     GitHub aanvaardt maximaal 100 bestanden per keer. Upload daarom eerst
-     alles behalve de map lib/fonts, en daarna de lettertypes in delen van
-     maximaal 100 bestanden (behoud de mapnaam lib/fonts). Makkelijker kan met
-     het gratis programma GitHub Desktop: daar sleept u alles in één keer.
-  4. Ga naar Settings > Pages. Bij "Branch" kies "main" en "/ (root)", klik "Save".
-  5. Na 1–2 minuten staat de app op:  https://UW-NAAM.github.io/pdf-studio/
-  Let op: deze pagina is openbaar. Er staan geen documenten op (die blijven
-  altijd op uw toestel), alleen de tool zelf. Controleer wel dat u het logo
-  mag publiceren (zie punt 4).
-
-Stap B — installeren op het toestel (heeft internet nodig, alleen deze ene keer)
-  Android: open het adres in Chrome > menu (⋮) > "App installeren" of
-           "Toevoegen aan startscherm".
-  GrapheneOS: open het adres in Vanadium (standaardbrowser) > menu (⋮) >
-           "App installeren".
-  iPhone/iPad: open het adres in Safari > Deel-knop > "Zet op beginscherm".
-
-Stap C — volledig offline maken
-  Open PDF Studio vanaf het beginscherm. Onderaan de startpagina staat
-  "Werkt offline". De gereedschappen werken dan al zonder internet.
-  Tik ook op "Alle lettertypes offline bewaren (± 95 MB)" zodat
-  'Tekst bewerken' ook offline elk lettertype heeft. Wacht tot er
-  "Alle lettertypes offline" staat.
-
-Bestanden opslaan op een telefoon
-  Android/GrapheneOS: het bestand komt in Downloads.
-  iPhone/iPad: er verschijnt "Opslaan of delen"; kies "Bewaar in Bestanden".
-
-Bediening op een telefoon
-  - Editor: tik op tekst om ze te wijzigen; tik op de balk onderaan om de
-    eigenschappen (lettertype, grootte, kleur) open te schuiven.
-  - Pagina's ordenen: gebruik de pijltjes onder elke miniatuur.
-  - Inzoomen: met de + en − knoppen of met twee vingers.
-
-
-3. UPDATES
-----------
-Een nieuwe versie zet u op dezelfde plaats (de bestanden in GitHub vervangen,
-of een nieuwe ZIP uitpakken). Toestellen halen de nieuwe versie automatisch op
-de volgende keer dat ze online zijn en de app openen.
-
-
-4. LOGO EN ICONEN
------------------
-  logo.png ......................... logo in de kopbalk
-  icons/icon-192.png, icon-512.png . app-icoon
-  icons/icon-maskable-512.png ...... app-icoon Android (met witrand)
-  icons/apple-touch-icon.png ....... app-icoon iPhone/iPad
-Vervang deze bestanden door eigen afbeeldingen met dezelfde naam en afmetingen.
-Het huidige logo is een stockafbeelding met watermerk ("pngtree"); voor
-openbaar gebruik heeft u daarvoor normaal een licentie nodig.
-
-
-5. LICENTIES
-------------
-PDF Studio gebruikt alleen open-source onderdelen. De licenties staan in de map
-"licenses": pdf-lib (MIT), pdf.js (Apache 2.0), fontkit (MIT), fflate (MIT) en
-lettertypes onder de SIL Open Font License, Apache 2.0, de GUST Font License,
-de Bitstream Vera-licentie en de Liberation-licentie. Deze mogen vrij gebruikt
-en verspreid worden, ook buiten een bedrijf.
-
-
-6. WAT (NOG) NIET KAN
----------------------
-PDF naar Word, Word naar PDF, OCR, PDF/A en scan opschonen staan op
-"Binnenkort": daarvoor is zware conversiesoftware nodig die niet in een
-browser draait.
+Nieuw
+- Tekstvak: een geselecteerd tekstvak heeft bovenaan een greep "Verplaatsen"; slepen daaraan verplaatst het vak.
+- Handtekening: tabs Tekenen / Typen / Afbeelding; vinkje "Bewaar deze handtekening voor later gebruik";
+  opgeslagen handtekeningen verschijnen bovenaan het venster (kiezen of verwijderen met het kruisje).
+  Ze worden alleen in deze browser op dit toestel bewaard (localStorage) en nergens naartoe gestuurd.
+- Afbeelding: PNG, JPG of WebP; de witte achtergrond wordt desgewenst transparant gemaakt.
