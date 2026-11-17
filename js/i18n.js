@@ -584,6 +584,7 @@ const D = {
   'Kies een foto of scan van uw handtekening (PNG, JPG of WebP). Teken ze het best met donkere inkt op wit papier.': 'Choose a photo or scan of your signature (PNG, JPG or WebP). Best signed in dark ink on white paper.', 'Witte achtergrond transparant maken': 'Make white background transparent',
   'Voorbeeld van de afbeelding': 'Image preview', 'Deze afbeelding kan niet worden gelezen.': 'This image cannot be read.', 'Kies een afbeelding (PNG, JPG of WebP).': 'Choose an image (PNG, JPG or WebP).', 'Teken met muis, pen of vinger in het vak.': 'Draw in the box with mouse, pen or finger.',
   'Teken eerst een handtekening.': 'Draw a signature first.', 'Typ eerst uw naam.': 'Type your name first.', 'Kies eerst een afbeelding.': 'Choose an image first.', 'Deze opgeslagen handtekening kan niet worden geladen.': 'This saved signature cannot be loaded.',
+  'Naam bij deze handtekening': 'Name for this signature', 'bv. Jan Peeters': 'e.g. Jan Peeters', 'Zonder naam': 'Unnamed',
   'Verplaatsen': 'Move', 'Slepen om te verplaatsen': 'Drag to move',
 };
 

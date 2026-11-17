@@ -509,7 +509,7 @@ function page(app, { topbar, id }) {
   }
   /* Opgeslagen handtekeningen: alleen in deze browser (localStorage), nooit verstuurd. */
   const SIG_KEY = 'pdfstudio-signatures';
-  const sigLoad = () => { try { const a = JSON.parse(lsGet(SIG_KEY, '[]')); return Array.isArray(a) ? a.filter((x) => x && typeof x.id === 'string' && typeof x.png === 'string' && x.png.startsWith('data:image/png;base64,')) : []; } catch { return []; } };
+  const sigLoad = () => { try { const a = JSON.parse(lsGet(SIG_KEY, '[]')); return Array.isArray(a) ? a.filter((x) => x && typeof x.id === 'string' && typeof x.png === 'string' && x.png.startsWith('data:image/png;base64,')).map((x) => ({ ...x, name: typeof x.name === 'string' ? x.name : '' })) : []; } catch { return []; } };
   const sigSave = (a) => { try { localStorage.setItem(SIG_KEY, JSON.stringify(a)); return true; } catch { return false; } };
   const loadCanvasFromUrl = (url) => new Promise((res, rej) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); res(c); }; im.onerror = rej; im.src = url; });
   // Foto of scan van een handtekening naar een canvas; wit papier wordt desgewenst transparant.
@@ -528,12 +528,11 @@ function page(app, { topbar, id }) {
     let mode = 'draw', savedSel = null, imgFile = null, imgCanvas = null, drawn = false, down = false;
     let saved = sigLoad();
     const c = el('canvas', { width: 560, height: 200, class: 'sigpad', 'aria-label': 'Tekenvlak voor handtekening' });
-    const g = c.getContext('2d'); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#0b2a6b';
+    const g = c.getContext('2d'); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#000000';
     c.addEventListener('pointerdown', (e) => { down = true; drawn = true; const r = c.getBoundingClientRect(); g.beginPath(); g.moveTo((e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height); c.setPointerCapture(e.pointerId); });
     c.addEventListener('pointermove', (e) => { if (!down) return; const r = c.getBoundingClientRect(); g.lineTo((e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height); g.stroke(); });
     c.addEventListener('pointerup', () => { down = false; });
     const typed = el('input', { type: 'text', id: 'sig-text', placeholder: 'Of typ uw naam', autocomplete: 'name' });
-    const colorIn = el('select', { id: 'sig-color', onchange: () => { g.strokeStyle = colorIn.value; } }, el('option', { value: '#0b2a6b' }, 'Blauw'), el('option', { value: '#000000' }, 'Zwart'));
     // Afbeelding
     const fileIn = el('input', { type: 'file', id: 'sig-file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp' });
     const transp = el('input', { type: 'checkbox', id: 'sig-transp', checked: true });
@@ -553,44 +552,51 @@ function page(app, { topbar, id }) {
         el('label', { class: 'check', for: 'sig-transp' }, transp, 'Witte achtergrond transparant maken'), prev),
     };
     const tabBtns = {};
-    const setMode = (m) => { mode = m; savedSel = null; Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== m; }); Object.entries(tabBtns).forEach(([k, b]) => b.setAttribute('aria-pressed', String(k === m))); renderSaved(); colorRow.hidden = m === 'image'; };
+    const setMode = (m) => { mode = m; savedSel = null; Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== m; }); Object.entries(tabBtns).forEach(([k, b]) => b.setAttribute('aria-pressed', String(k === m))); renderSaved(); };
     const tabs = el('div', { class: 'seg h', role: 'group', 'aria-label': 'Manier van invoeren' }, ...[['draw', 'Tekenen'], ['type', 'Typen'], ['image', 'Afbeelding']].map(([k, label]) => (tabBtns[k] = el('button', { type: 'button', 'aria-pressed': String(k === mode), onclick: () => setMode(k) }, label))));
-    const colorRow = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, el('label', { for: 'sig-color', class: 'flabel' }, 'Kleur'), colorIn);
     // Bewaren
-    const keep = el('input', { type: 'checkbox', id: 'sig-keep' });
+    const keep = el('input', { type: 'checkbox', id: 'sig-keep', onchange: () => { nameRow.hidden = !keep.checked || !!savedSel; if (keep.checked) nameIn.focus(); } });
+    const nameIn = el('input', { type: 'text', id: 'sig-name', maxlength: '40', placeholder: 'bv. Jan Peeters', autocomplete: 'off' });
+    const nameRow = el('div', { class: 'field', hidden: true }, el('label', { for: 'sig-name' }, 'Naam bij deze handtekening'), nameIn);
     const keepRow = el('label', { class: 'check', for: 'sig-keep' }, keep, 'Bewaar deze handtekening voor later gebruik (alleen in deze browser)');
     // Opgeslagen lijst
     const savedBox = el('div', { class: 'sig-saved' });
     function renderSaved() {
       savedBox.innerHTML = ''; savedBox.hidden = !saved.length; if (!saved.length) return;
       savedBox.append(el('div', { class: 'flabel' }, 'Opgeslagen handtekeningen'), el('div', { class: 'sig-grid' }, ...saved.map((s) => el('div', { class: 'sig-item' },
-        el('button', { type: 'button', class: 'sig-pick', 'aria-pressed': String(savedSel === s.id), 'aria-label': 'Deze handtekening gebruiken', onclick: () => { savedSel = savedSel === s.id ? null : s.id; renderSaved(); } }, el('img', { src: s.png, alt: '' })),
+        el('button', { type: 'button', class: 'sig-pick', 'aria-pressed': String(savedSel === s.id), 'aria-label': 'Deze handtekening gebruiken' + (s.name ? ': ' + s.name : ''), title: s.name || '', onclick: () => { savedSel = savedSel === s.id ? null : s.id; renderSaved(); } }, el('img', { src: s.png, alt: '' }), el('span', { class: 'sig-name' }, s.name || 'Zonder naam')),
         el('button', { type: 'button', class: 'sig-del', 'aria-label': 'Handtekening verwijderen', onclick: () => { saved = saved.filter((x) => x.id !== s.id); if (savedSel === s.id) savedSel = null; sigSave(saved); renderSaved(); } }, icon('x', 12, '#fff', 2.5))))));
-      keepRow.hidden = !!savedSel; panelWrap.hidden = !!savedSel; tabs.hidden = !!savedSel; colorRow.hidden = !!savedSel || mode === 'image';
+      keepRow.hidden = !!savedSel; nameRow.hidden = !!savedSel || !keep.checked; panelWrap.hidden = !!savedSel; tabs.hidden = !!savedSel;
     }
     const panelWrap = el('div', null, panels.draw, panels.type, panels.image);
-    const body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, savedBox, tabs, panelWrap, colorRow, keepRow);
+    const body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, savedBox, tabs, panelWrap, keepRow, nameRow);
     renderSaved();
     let result = null;
     const ok = await modal({ title: 'Handtekening', body, ok: 'Plaatsen', onOk: async () => {
       let src = null;
       if (savedSel) { const s = saved.find((x) => x.id === savedSel); try { src = await loadCanvasFromUrl(s.png); } catch { toast('Deze opgeslagen handtekening kan niet worden geladen.', 'error'); return false; } }
       else if (mode === 'draw') { if (!drawn) { toast('Teken eerst een handtekening.', 'error'); return false; } src = c; }
-      else if (mode === 'type') { if (!typed.value.trim()) { toast('Typ eerst uw naam.', 'error'); return false; } src = document.createElement('canvas'); src.width = 900; src.height = 220; const x = src.getContext('2d'); x.fillStyle = colorIn.value; x.font = 'italic 110px "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive'; x.textBaseline = 'middle'; x.fillText(typed.value.trim(), 20, 115); }
+      else if (mode === 'type') { if (!typed.value.trim()) { toast('Typ eerst uw naam.', 'error'); return false; } src = document.createElement('canvas'); src.width = 900; src.height = 220; const x = src.getContext('2d'); x.fillStyle = '#000000'; x.font = 'italic 110px "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive'; x.textBaseline = 'middle'; x.fillText(typed.value.trim(), 20, 115); }
       else { if (!imgFile) { toast('Kies eerst een afbeelding.', 'error'); return false; } if (!imgCanvas) await refreshImg(); if (!imgCanvas) return false; src = imgCanvas; }
-      result = { src, fromSaved: !!savedSel, keep: keep.checked }; return true;
+      result = { src, fromSaved: !!savedSel, keep: keep.checked, name: nameIn.value.trim().slice(0, 40) }; return true;
     } });
     if (!ok || !result) { setTool('select'); return; }
-    let trimmed = trimCanvas(result.src);
+    let trimmed = trimCanvas(result.src); blackenInk(trimmed);
     if (result.keep && !result.fromSaved) {
       // kleine PNG bewaren (max. 600 px breed) zodat de opslag beperkt blijft
       const k = Math.min(1, 600 / trimmed.width); const sm = document.createElement('canvas'); sm.width = Math.max(1, Math.round(trimmed.width * k)); sm.height = Math.max(1, Math.round(trimmed.height * k)); sm.getContext('2d').drawImage(trimmed, 0, 0, sm.width, sm.height);
-      const list = [{ id: Date.now().toString(36), png: sm.toDataURL('image/png') }, ...sigLoad()].slice(0, 8);
+      const list = [{ id: Date.now().toString(36), name: result.name, png: sm.toDataURL('image/png') }, ...sigLoad()].slice(0, 8);
       toast(sigSave(list) ? 'Handtekening opgeslagen.' : 'Opslaan is niet gelukt (opslag vol of geblokkeerd).', sigSave(list) ? undefined : 'error');
     }
     const blob = await new Promise((r) => trimmed.toBlob(r, 'image/png'));
     placeImage(new Uint8Array(await blob.arrayBuffer()), 'png', trimmed.width, trimmed.height, 170, { sig: true });
     setTool('select');
+  }
+  // Handtekeningen zijn altijd zwart: heeft de afbeelding een transparante achtergrond, dan wordt alle inkt zwart.
+  function blackenInk(c) {
+    const g = c.getContext('2d', { willReadFrequently: true }); const im = g.getImageData(0, 0, c.width, c.height), d = im.data; let clear = false;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { clear = true; break; }
+    if (!clear) return; for (let i = 0; i < d.length; i += 4) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } g.putImageData(im, 0, 0);
   }
   function trimCanvas(c) {
     const g = c.getContext('2d'); const d = g.getImageData(0, 0, c.width, c.height).data; let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0;

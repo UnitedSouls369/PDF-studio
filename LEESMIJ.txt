@@ -1,24 +1,13 @@
-ABN PDF Studio - update: tekstvak verplaatsen, handtekeningen bewaren, handtekening uit afbeelding
-=================================================================================================
+ABN PDF Studio - update: handtekeningen alleen zwart, naam bij opgeslagen handtekening
+=======================================================================================
 
-Deze map bevat de 3 bestanden die gewijzigd zijn ten opzichte van de vorige versie:
-  js/editor.js    (verplaatsgreep voor tekstvakken, nieuw handtekeningvenster)
-  js/i18n.js      (Engelse vertalingen voor de nieuwe teksten)
-  css/app.css     (opmaak van de greep en het handtekeningvenster)
+Gewijzigde bestanden (kopieer de mappen js en css over de gelijknamige mappen van de Offline PDF Studio):
+  js/editor.js, js/i18n.js, css/app.css
+Maak eerst een kopie van uw map: deze bestanden vervangen de oude volledig.
 
-Installeren in de Offline PDF Studio
-1. Sluit de app en maak een kopie van uw bestaande map (voor de zekerheid).
-2. Kopieer de mappen js en css uit deze zip over de gelijknamige mappen van de Offline PDF Studio
-   en kies "Bestanden in de doelmap vervangen".
-3. Start de app opnieuw. Is ze als app geinstalleerd (PWA) of staat er een service worker in, verwijder
-   dan de oude cache of installeer opnieuw, of druk Ctrl+F5.
-
-Let op: de 3 bestanden vervangen de oude volledig. Heeft uw offline versie eigen aanpassingen in
-js/editor.js, js/i18n.js of css/app.css, dan gaan die verloren. Laat het weten, dan voeg ik ze samen.
-
-Nieuw
-- Tekstvak: een geselecteerd tekstvak heeft bovenaan een greep "Verplaatsen"; slepen daaraan verplaatst het vak.
-- Handtekening: tabs Tekenen / Typen / Afbeelding; vinkje "Bewaar deze handtekening voor later gebruik";
-  opgeslagen handtekeningen verschijnen bovenaan het venster (kiezen of verwijderen met het kruisje).
-  Ze worden alleen in deze browser op dit toestel bewaard (localStorage) en nergens naartoe gestuurd.
-- Afbeelding: PNG, JPG of WebP; de witte achtergrond wordt desgewenst transparant gemaakt.
+Dit pakket bevat ook alle eerdere wijzigingen:
+- Tekstvak: bovenaan een greep "Verplaatsen" om het vak te slepen.
+- Handtekening: tabs Tekenen / Typen / Afbeelding; handtekeningen bewaren voor later gebruik (alleen in deze browser).
+- Handtekeningen zijn altijd zwart: de kleurkeuze is verwijderd, en bij een afbeelding met transparante achtergrond wordt de inkt zwart gemaakt.
+- Bij het bewaren kunt u een naam invullen (bv. van wie de handtekening is); de naam staat onder de opgeslagen handtekening.
+Eerder opgeslagen handtekeningen blijven bestaan (zonder naam) en worden bij het plaatsen zwart gemaakt.
