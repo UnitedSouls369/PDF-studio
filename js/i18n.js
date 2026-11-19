@@ -197,7 +197,7 @@ const D = {
   'In de PDF:': 'In the PDF:', 'identiek (origineel)': 'identical (original)', 'identiek': 'identical', 'metrisch gelijk': 'metrically equal', 'gelijkend': 'similar',
   'Lokaal verwerkt — niets verlaat uw computer': 'Processed locally — nothing leaves your computer', 'Lokaal verwerkt — niets verlaat uw toestel': 'Processed locally — nothing leaves your device',
   // offline-app
-  'Werkt offline': 'Works offline', 'Alle lettertypes offline bewaren (± 95 MB)': 'Save all fonts offline (± 95 MB)', 'Alle lettertypes offline': 'All fonts offline', 'Installeren als app': 'Install as app',
+  'Werkt offline': 'Works offline', 'Versie van deze app': 'Version of this app', 'Nieuwe versie geïnstalleerd.': 'New version installed.', 'Nu herladen': 'Reload now', 'Alle lettertypes offline bewaren (± 95 MB)': 'Save all fonts offline (± 95 MB)', 'Alle lettertypes offline': 'All fonts offline', 'Installeren als app': 'Install as app',
   'iPhone/iPad: tik op Deel → "Zet op beginscherm" om te installeren.': 'iPhone/iPad: tap Share → "Add to Home Screen" to install.',
   'PDF Studio wordt geladen…': 'Loading PDF Studio…', 'ABN PDF Studio wordt geladen…': 'Loading ABN PDF Studio…',
   // ---- nieuwe hulpmiddelen ----
@@ -594,6 +594,7 @@ const pages = (n) => `${n} page${n == 1 ? '' : 's'}`;
 const files = (n) => `${n} file${n == 1 ? '' : 's'}`;
 const PG = "(\\d+) pagina(?:'s)?";
 const P = [
+  [/^Versie (\d{4}\.\d\d\.\d\d-\d+)$/, (m) => `Version ${m[1]}`],
   [/^(\d+) pagina(?:'s)?$/, (m) => pages(m[1])],
   [/^(\d+) bestand(?:en|\(en\))?$/, (m) => files(m[1])],
   [/^(\d+) afbeelding(?:en|\(en\))?$/, (m) => `${m[1]} image${m[1] == 1 ? '' : 's'}`],

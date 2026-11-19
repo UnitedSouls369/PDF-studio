@@ -1,6 +1,7 @@
 // PDF Studio — startpagina, routing en het gedeelde toolscherm
 import { loadLibs, modal, el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
 import { PageGrid } from './grid.js';
+import { VERSION } from './version.js';
 import { startI18n, langSwitch, tr, lang } from './i18n.js';
 const IMPL = {};
 const SOON = new Set([]); // tegels met 'Binnenkort' (modules laden pas op de achtergrond)
@@ -125,7 +126,7 @@ function renderHome() {
           el('p', null, "Bewerk, organiseer, beveilig en converteer PDF's — gratis, ook zonder internet. Bestanden worden lokaal in uw browser verwerkt.")),
         el('div', null, el('label', { for: 'q' }, 'Zoek een hulpmiddel'), q))),
     body,
-    el('footer', { class: 'foot' }, el('span', null, 'PDF Studio · open-source PDF-gereedschap'), el('div', { id: 'offline-slot', class: 'offline-slot' }), el('span', null, 'Verwerking gebeurt lokaal — er worden geen bestanden verstuurd')));
+    el('footer', { class: 'foot' }, el('span', null, 'PDF Studio · open-source PDF-gereedschap', el('span', { class: 'ver', id: 'app-version', title: 'Versie van deze app' }, 'Versie ' + VERSION)), el('div', { id: 'offline-slot', class: 'offline-slot' }), el('span', null, 'Verwerking gebeurt lokaal — er worden geen bestanden verstuurd')));
   draw();
 }
 

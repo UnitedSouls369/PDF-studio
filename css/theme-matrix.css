@@ -102,3 +102,5 @@ input::placeholder,textarea::placeholder{color:#4F8A5B}
 *{scrollbar-color:var(--ln) #000}
 @media (prefers-reduced-motion:reduce){.matrix-rain{display:none}}
 .lang-opt[aria-pressed=true]{background:var(--g)!important;color:#000!important}.lang-switch{border-color:var(--ln)}
+.update-bar{background:#000;color:var(--g);border:1px solid var(--g)}
+.update-bar .btn{background:var(--g);color:#000;border-color:var(--g)}

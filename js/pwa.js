@@ -2,7 +2,21 @@
 (function () {
   if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
   let deferred = null; const st = { fonts: null, ready: false };
-  navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => { st.ready = true; checkFonts(); paint(); }).catch(() => {});
+  // Nieuwe versie: de service worker neemt meteen over; de pagina zelf draait nog op de oude bestanden → melden en laten herladen
+  const hadController = !!navigator.serviceWorker.controller; let barShown = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || barShown) return; barShown = true;
+    const bar = document.createElement('div'); bar.className = 'update-bar'; bar.setAttribute('role', 'status');
+    const t = document.createElement('span'); t.textContent = 'Nieuwe versie geïnstalleerd.';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.textContent = 'Nu herladen'; b.onclick = () => location.reload();
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'btn sm'; x.textContent = '×'; x.setAttribute('aria-label', 'Sluiten'); x.onclick = () => bar.remove();
+    bar.append(t, b, x); document.body.append(bar);
+  });
+  // bij openen en telkens de app weer zichtbaar wordt: op de server nakijken of er een nieuwe versie is
+  const check = () => navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  setInterval(check, 30 * 60 * 1000);
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(() => navigator.serviceWorker.ready).then(() => { st.ready = true; checkFonts(); paint(); }).catch(() => {});
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; paint(); });
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data.type === 'fonts-progress') st.fonts = { busy: true, done: e.data.done, total: e.data.total };
