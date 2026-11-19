@@ -1,6 +1,6 @@
 // Tekst-engine: bestaande tekst echt vervangen in de paginacode, in het originele lettertype,
 // met verschuiving van de rest van de regel (reflow op regelniveau).
-import { PDFLib } from './core.js';
+import { PDFLib, fflate } from './core.js';
 import { candidates } from './fontlib.js';
 const { PDFName, PDFDict, PDFArray, PDFNumber, PDFRawStream, PDFStream, PDFRef, decodePDFRawStream, StandardFontEmbedder, StandardFonts } = PDFLib;
 const N = (s) => PDFName.of(s);
@@ -9,11 +9,14 @@ const BASE = new URL('../', import.meta.url).href;
 /* ================= Tokenizer ================= */
 const WS = new Set([0, 9, 10, 12, 13, 32]);
 const DELIM = new Set([40, 41, 60, 62, 91, 93, 123, 125, 47, 37]);
+// tekenklassen als tabel (sneller dan Set-opzoekingen in de lus): 1 = witruimte, 2 = scheidingsteken
+const CLS = new Uint8Array(256); for (const c of WS) CLS[c] = 1; for (const c of DELIM) CLS[c] = 2;
+const POW10 = [1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
 function tokenize(b) {
   const toks = []; let i = 0; const n = b.length;
   while (i < n) {
     const c = b[i];
-    if (WS.has(c)) { i++; continue; }
+    if (CLS[c] === 1) { i++; continue; }
     if (c === 37) { while (i < n && b[i] !== 10 && b[i] !== 13) i++; continue; }
     const s = i;
     if (c === 40) {
@@ -37,11 +40,16 @@ function tokenize(b) {
     if (c === 93) { toks.push({ t: ']', s, e: i + 1 }); i++; continue; }
     if (c === 123 || c === 125) { i++; continue; }
     if (c === 47) { i++; while (i < n && !WS.has(b[i]) && !DELIM.has(b[i])) i++; toks.push({ t: 'name', v: String.fromCharCode(...b.subarray(s + 1, i)), s, e: i }); continue; }
-    while (i < n && !WS.has(b[i]) && !DELIM.has(b[i])) i++;
+    while (i < n && !CLS[b[i]]) i++;
     if (i === s) { i++; continue; }
+    if ((c >= 48 && c <= 57) || c === 43 || c === 45 || c === 46) { // getal zonder tussenstring of reguliere expressie
+      let j = s, neg = false; if (c === 43 || c === 45) { neg = c === 45; j++; }
+      let ip = 0, fp = 0, fd = 0, dot = false, digits = 0, ok = j < i;
+      for (; j < i; j++) { const d = b[j]; if (d >= 48 && d <= 57) { digits++; if (dot) { if (fd < 10) { fp = fp * 10 + d - 48; fd++; } } else ip = ip * 10 + d - 48; } else if (d === 46 && !dot) dot = true; else { ok = false; break; } }
+      if (ok && digits) { const v = ip + (fd ? fp / POW10[fd] : 0); toks.push({ t: 'num', v: neg ? -v : v, s, e: i }); continue; }
+    }
     const w = String.fromCharCode(...b.subarray(s, i));
-    if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(w)) toks.push({ t: 'num', v: parseFloat(w), s, e: i });
-    else if (w === 'true' || w === 'false' || w === 'null') toks.push({ t: 'lit', v: w, s, e: i });
+    if (w === 'true' || w === 'false' || w === 'null') toks.push({ t: 'lit', v: w, s, e: i });
     else {
       toks.push({ t: 'op', v: w, s, e: i });
       if (w === 'ID') { i++; while (i < n - 2 && !(WS.has(b[i]) && b[i + 1] === 69 && b[i + 2] === 73 && (i + 3 >= n || WS.has(b[i + 3]) || DELIM.has(b[i + 3])))) i++; i += 3; toks.push({ t: 'op', v: 'EI', s: i - 2, e: i }); }
@@ -139,15 +147,7 @@ const mul = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2
 const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 const latin1 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return s; };
 
-function analyze(doc, page, vpT) {
-  const ctx = doc.context; const contents = page.node.Contents(); if (!contents) return null;
-  const streams = contents instanceof PDFArray ? contents.asArray().map((r) => ctx.lookup(r)) : [contents];
-  const parts = [];
-  for (const s of streams) { if (s instanceof PDFRawStream) parts.push(decodePDFRawStream(s).decode()); else if (s instanceof PDFStream && s.getContents) parts.push(s.getContents()); else return null; }
-  let total = 0; parts.forEach((p) => total += p.length + 1);
-  const buf = new Uint8Array(total); let off = 0; for (const p of parts) { buf.set(p, off); off += p.length; buf[off++] = 10; }
-  const res = page.node.Resources(); const fontsDict = res && res.lookup(N('Font'));
-  const fonts = new Map(); const fontOf = (name) => { if (!fonts.has(name)) fonts.set(name, new FontInfo(ctx, fontsDict instanceof PDFDict ? fontsDict.lookup(N(name)) : null, name)); return fonts.get(name); };
+function parseOps(buf) {
   const toks = tokenize(buf); const ops = []; let stack = [];
   for (let k = 0; k < toks.length; k++) { const t = toks[k];
     if (t.t === 'op') { ops.push({ op: t.v, args: stack, s: stack.length ? stack[0].s : t.s, e: t.e }); stack = []; }
@@ -155,6 +155,31 @@ function analyze(doc, page, vpT) {
     else if (t.t === '<<') { let depth = 1; const s0 = t.s; k++; while (k < toks.length && depth) { if (toks[k].t === '<<') depth++; else if (toks[k].t === '>>') depth--; k++; } k--; stack.push({ t: 'dict', s: s0, e: toks[k].e }); }
     else stack.push(t);
   }
+  return ops;
+}
+const OPS_CACHE = new Map();
+// vingerafdruk van de (gecomprimeerde) stroombytes: lengte + FNV-hash over een steekproef
+function streamKey(streams) {
+  let h = 2166136261 >>> 0, n = 0;
+  for (const s of streams) { const b = s instanceof PDFRawStream ? s.contents : null; if (!b) return null; n += b.length; const step = Math.max(1, Math.floor(b.length / 4096)); for (let i = 0; i < b.length; i += step) { h ^= b[i]; h = Math.imul(h, 16777619) >>> 0; } h ^= b.length; h = Math.imul(h, 16777619) >>> 0; }
+  return n + ':' + h + ':' + streams.length;
+}
+function analyze(doc, page, vpT) {
+  const ctx = doc.context; const contents = page.node.Contents(); if (!contents) return null;
+  const streams = contents instanceof PDFArray ? contents.asArray().map((r) => ctx.lookup(r)) : [contents];
+  // dezelfde paginacode wordt bij elk voorbeeld en bij opslaan opnieuw gelezen: decoderen + tokenizen één keer bewaren
+  const key = streamKey(streams); let cached = key && OPS_CACHE.get(key);
+  let buf, ops;
+  if (cached) ({ buf, ops } = cached);
+  else {
+    const parts = [];
+    for (const s of streams) { if (s instanceof PDFRawStream) parts.push(decodePDFRawStream(s).decode()); else if (s instanceof PDFStream && s.getContents) parts.push(s.getContents()); else return null; }
+    let total = 0; parts.forEach((p) => total += p.length + 1);
+    buf = new Uint8Array(total); let off = 0; for (const p of parts) { buf.set(p, off); off += p.length; buf[off++] = 10; }
+  }
+  const res = page.node.Resources(); const fontsDict = res && res.lookup(N('Font'));
+  const fonts = new Map(); const fontOf = (name) => { if (!fonts.has(name)) fonts.set(name, new FontInfo(ctx, fontsDict instanceof PDFDict ? fontsDict.lookup(N(name)) : null, name)); return fonts.get(name); };
+  if (!ops) { ops = parseOps(buf); if (key) { OPS_CACHE.set(key, { buf, ops }); if (OPS_CACHE.size > 6) OPS_CACHE.delete(OPS_CACHE.keys().next().value); } }
   const raw = (x) => latin1(buf.subarray(x.s, x.e));
   let G = { ctm: [1, 0, 0, 1, 0, 0], fill: [], gs: '', ts: { font: null, size: 0, tc: 0, tw: 0, th: 1, tl: 0, rise: 0, tr: 0 } };
   const stackG = []; let tm = [1, 0, 0, 1, 0, 0], tlm = [1, 0, 0, 1, 0, 0]; let chain = 0;
@@ -195,7 +220,7 @@ function analyze(doc, page, vpT) {
         if (op === 'TJ') { operand = args[0]; const arr = args[0] && args[0].t === 'arr' ? args[0].v : []; for (const el of arr) { if (el.t === 'str') { adv += advance(el.v, f, ts); str += decodeStr(f, el.v); } else if (el.t === 'num') adv -= el.v / 1000 * ts.size * ts.th; } }
         else { operand = args[args.length - 1]; if (operand && operand.t === 'str') { adv = advance(operand.v, f, ts); str = decodeStr(f, operand.v); } }
         const lin = mul(tm, G.ctm); const sx = Math.hypot(lin[0], lin[1]) * Math.hypot(vpT[0], vpT[1]);
-        shows.push({ i, op, x, y, endX: x + adv * sx, adv, sx, str, font: ts.font, f, ts: { ...ts }, ctm: [...G.ctm], tm: [...tm], fill: [...G.fill], gs: G.gs, operandRaw: operand ? raw(operand) : '', chain, upright: Math.abs(lin[1]) < 1e-6 && Math.abs(lin[2]) < 1e-6 && lin[0] > 0,
+        shows.push({ i, op, x, y, endX: x + adv * sx, adv, sx, str, font: ts.font, f, ts: { ...ts }, ctm: [...G.ctm], tm: [...tm], fill: [...G.fill], gs: G.gs, operandRaw: operand ? raw(operand) : '', chain, upright: (() => { const fm = mul(lin, vpT); return Math.abs(fm[1]) <= 1e-3 * Math.abs(fm[0]) && Math.abs(fm[2]) <= 1e-3 * Math.abs(fm[3]) && fm[0] > 0 && fm[3] < 0; })(), // horizontaal in het (eventueel gedraaide) kijkvlak
           elems: op === 'TJ' ? (args[0] && args[0].t === 'arr' ? args[0].v : []) : null, bytes: op !== 'TJ' && operand && operand.t === 'str' ? operand.v : null });
         tm = mul([1, 0, 0, 1, adv, 0], tm);
         break;
@@ -203,7 +228,13 @@ function analyze(doc, page, vpT) {
       default: break;
     }
   }
-  return { ctx, buf, ops, shows, fonts, fontOf, fontsDict, res, graphics, pageWidth: (() => { const b = page.getCropBox(); const r = ((page.getRotation().angle % 360) + 360) % 360; return r % 180 ? b.height : b.width; })(), pageBottom: (() => { const b = page.getCropBox(); const r = ((page.getRotation().angle % 360) + 360) % 360; return r % 180 ? b.width : b.height; })() };
+  return { ctx, buf, ops, shows, fonts, fontOf, fontsDict, res, graphics, ...pageFrame(page, vpT) };
+}
+// grenzen van de pagina in kijkcoördinaten (ook als vpT gedraaid is, bv. voor verticale tekst)
+function pageFrame(page, vpT) {
+  const b = page.getCropBox(); const pts = [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]].map(([x, y]) => apply(vpT, x, y));
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  return { pageLeft: Math.min(...xs), pageRight: Math.max(...xs), pageTop: Math.min(...ys), pageBottom: Math.max(...ys), pageWidth: Math.max(...xs) };
 }
 function codesOf(f, bytes) { if (f.blen === 1) return bytes; const out = []; for (let k = 0; k + f.blen - 1 < bytes.length; k += f.blen) { let c = 0; for (let j = 0; j < f.blen; j++) c = (c << 8) | bytes[k + j]; out.push(c); } return out; }
 function decodeStr(f, bytes) { let s = ''; for (const c of codesOf(f, bytes)) s += f.c2u.get(c) ?? ''; return s; }
@@ -244,7 +275,7 @@ function hexColor(h) { const m = h.replace('#', '').match(/.{2}/g).map((x) => pa
  * edits: [{ item:{x,base,w,size}, text, style:{fam,bold,italic,size,color}, style0:{...zelfde, bij aanmaak} }]
  * Resultaat: { ok, overflow:[{index, mm}], reason }
  */
-export async function rewritePage(doc, page, edits, vpT, docFonts) {
+export async function rewritePage(doc, page, edits, vpT, docFonts, { compress = true } = {}) {
   const a = analyze(doc, page, vpT); if (!a) return { ok: false, reason: 'geen inhoud' };
   const { ctx, buf, ops, shows } = a;
   // fragmenten koppelen
@@ -299,7 +330,7 @@ export async function rewritePage(doc, page, edits, vpT, docFonts) {
   }
   pieces.push(buf.subarray(pos)); pieces.push(enc.encode('\nQ\n' + blocks.join('\n') + '\n'));
   let len = 0; pieces.forEach((p) => len += p.length); const out = new Uint8Array(len); let o2 = 0; for (const p of pieces) { out.set(p, o2); o2 += p.length; }
-  page.node.set(N('Contents'), ctx.obj([ctx.register(ctx.flateStream(out))])); // als lijst, zodat later tekenen op deze pagina kan
+  page.node.set(N('Contents'), ctx.obj([ctx.register(compress ? ctx.stream(fflate.zlibSync(out, { level: 4 }), { Filter: 'FlateDecode' }) : ctx.stream(out))])); // als lijst, zodat later tekenen op deze pagina kan
   return { ok: true, overflow, reports: edits.map((e) => e.report || []) };
 }
 function userShift(vpT, dVp, dyVp = 0) { // verschuiving in viewport terugrekenen naar gebruikersruimte
@@ -442,7 +473,7 @@ async function reflowParagraphs(doc, a, page, groups, editOf, editLines, vpT, do
   const lineOf = (y) => all.find((l) => Math.abs(l.y - y) <= Math.max(1, l.size * 0.35));
   const used = new Set();
   // rechterrand van de tekst: breedste regel in de kolom (bij ≥3 regels), anders gespiegelde linkermarge
-  const textRight = (L) => { const col = all.filter((l) => Math.abs(l.left - L.left) <= 2 && !l.gapped); const m = Math.max(...col.map((l) => l.end)); return col.length >= 3 ? m : Math.max(m, a.pageWidth - L.left); };
+  const textRight = (L) => { const col = all.filter((l) => Math.abs(l.left - L.left) <= 2 && !l.gapped); const m = Math.max(...col.map((l) => l.end)); return col.length >= 3 ? m : Math.max(m, a.pageRight - (L.left - a.pageLeft)); };
   const firstWordW = (L) => { let w = 0; for (const g of glyphsOfShow(L.shows[0])) { if (g.space) break; w += g.adv; } return w; };
   const wrapped = (prev, L) => prev.end + prev.size * 0.25 + firstWordW(L) > textRight(prev) - 0.5;
   for (const EL of editLines) {
@@ -471,7 +502,7 @@ async function reflowParagraphs(doc, a, page, groups, editOf, editLines, vpT, do
     // rechtermarge: langste regel van de alinea, of van de kolom als de alinea één regel heeft
     let R = Math.max(...ctxLines.map((l) => l.end));
     { const col = all.filter((l) => (Math.abs(l.left - L0.left) <= 2 || Math.abs(l.left - paraLeft) <= 2) && !l.gapped); R = Math.max(R, ...col.map((l) => l.end)); } // breedte van de tekstkolom
-    if (ctxLines.length === 1) R = Math.max(R, a.pageWidth - Math.min(L0.left, paraLeft)); // losse regel: tot de rechtermarge (gespiegeld)
+    if (ctxLines.length === 1) R = Math.max(R, a.pageRight - (Math.min(L0.left, paraLeft) - a.pageLeft)); // losse regel: tot de rechtermarge (gespiegeld)
     if (!lead) lead = L0.size * 1.2;
     // glyph-stroom opbouwen
     const lineGlyphs = [];

@@ -121,7 +121,9 @@ export function modal({ title, body, ok = 'OK', cancel = 'Annuleren', onOk }) {
     form.addEventListener('submit', async (e) => { e.preventDefault(); const v = onOk ? await onOk() : true; if (v !== undefined && v !== false) close(v); });
     bg.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(null); });
     bg.append(form); document.body.append(bg);
-    const f = form.querySelector('input,select,textarea,button.pri'); if (f) f.focus();
+    // eerste zichtbare invoerveld focussen (verborgen tabbladen overslaan); anders het venster zelf, zodat Esc altijd werkt
+    form.tabIndex = -1; const f = [...form.querySelectorAll('input,select,textarea,button.pri')].find((x) => x.offsetParent !== null && !x.disabled && !/^(checkbox|radio)$/.test(x.type));
+    (f || form).focus(); if (document.activeElement !== f && document.activeElement !== form) form.focus();
   });
 }
 export async function askPassword(fileName, wrong) {

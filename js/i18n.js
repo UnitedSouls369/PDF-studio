@@ -201,6 +201,7 @@ const D = {
   'iPhone/iPad: tik op Deel → "Zet op beginscherm" om te installeren.': 'iPhone/iPad: tap Share → "Add to Home Screen" to install.',
   'PDF Studio wordt geladen…': 'Loading PDF Studio…', 'ABN PDF Studio wordt geladen…': 'Loading ABN PDF Studio…',
   // ---- nieuwe hulpmiddelen ----
+  'Gekopieerd': 'Copied', 'Kopiëren': 'Copy', 'Dupliceren': 'Duplicate', 'Plakken': 'Paste', 'Ander bestand openen?': 'Open another file?', 'De wijzigingen in het huidige document zijn nog niet opgeslagen en gaan verloren.': 'The changes to the current document have not been saved and will be lost.', 'Openen': 'Open', 'Laat los om te openen in PDF Studio': 'Drop to open in PDF Studio', 'Dit bestandstype kan PDF Studio niet openen.': 'PDF Studio cannot open this file type.',
   'Lettertypes en OCR offline bewaren (± 115 MB)': 'Save fonts and OCR offline (± 115 MB)', 'Lettertypes en OCR offline': 'Fonts and OCR offline', 'STEMPEL': 'STAMP', 'Nr': 'No.', 'Waarde': 'Value', 'Schaal ': 'Scale',
   'Meten': 'Measure',
   'Afstanden, omtrek en oppervlakte meten op schaal, bv. op plannen.': 'Measure distances, perimeters and areas to scale, e.g. on drawings.',

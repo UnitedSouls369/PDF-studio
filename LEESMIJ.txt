@@ -1,13 +1,106 @@
-ABN PDF Studio - update: handtekeningen alleen zwart, naam bij opgeslagen handtekening
-=======================================================================================
+PDF Studio — gratis PDF-gereedschap dat volledig offline werkt
+=================================================================
 
-Gewijzigde bestanden (kopieer de mappen js en css over de gelijknamige mappen van de Offline PDF Studio):
-  js/editor.js, js/i18n.js, css/app.css
-Maak eerst een kopie van uw map: deze bestanden vervangen de oude volledig.
+Alles gebeurt op uw eigen toestel. Er worden nooit bestanden verstuurd.
+U heeft geen account en geen internet nodig.
 
-Dit pakket bevat ook alle eerdere wijzigingen:
-- Tekstvak: bovenaan een greep "Verplaatsen" om het vak te slepen.
-- Handtekening: tabs Tekenen / Typen / Afbeelding; handtekeningen bewaren voor later gebruik (alleen in deze browser).
-- Handtekeningen zijn altijd zwart: de kleurkeuze is verwijderd, en bij een afbeelding met transparante achtergrond wordt de inkt zwart gemaakt.
-- Bij het bewaren kunt u een naam invullen (bv. van wie de handtekening is); de naam staat onder de opgeslagen handtekening.
-Eerder opgeslagen handtekeningen blijven bestaan (zonder naam) en worden bij het plaatsen zwart gemaakt.
+
+1. OP EEN COMPUTER (uit deze ZIP)
+---------------------------------
+Pak de ZIP volledig uit (niet openen vanuit de ZIP zelf) en dubbelklik:
+
+  Windows ........ "Start PDF Studio (Windows).bat"
+  Mac ............ "Start PDF Studio (Mac).command"
+                   (eerste keer: rechtsklik > Open, omdat het niet uit de App Store komt)
+  Linux .......... "Start PDF Studio (Linux).sh"
+
+Er opent een zwart venster en daarna uw browser. Laat het zwarte venster open
+zolang u PDF Studio gebruikt; sluiten = stoppen. Er wordt niets geïnstalleerd en
+er zijn geen beheerdersrechten nodig. De tool is alleen bereikbaar op uw eigen
+computer (localhost), niet vanaf het netwerk.
+
+Waarom niet gewoon index.html openen? Browsers blokkeren dan onderdelen
+(lettertypes, PDF-weergave). Het startbestand lost dat op.
+
+Tip: in Chrome of Edge verschijnt in de adresbalk "App installeren". Dan krijgt
+PDF Studio een eigen icoon en venster.
+
+
+2. OP SMARTPHONE OF TABLET (Android, GrapheneOS, iPhone, iPad)
+--------------------------------------------------------------
+Telefoons kunnen geen startbestand uitvoeren. Daarom gebruikt u PDF Studio daar
+als web-app: één keer openen via internet, op het beginscherm zetten, daarna
+werkt hij volledig offline (ook in vliegtuigmodus).
+
+Stap A — de web-app één keer online zetten (gratis, ±10 minuten, via een computer)
+  1. Maak een gratis account op https://github.com
+  2. Klik op "New repository", naam bv. "pdf-studio", kies "Public", klik "Create".
+  3. Klik "uploading an existing file" en sleep de INHOUD van deze map erin
+     (alle bestanden en mappen, niet de ZIP zelf). Klik "Commit changes".
+     GitHub aanvaardt maximaal 100 bestanden per keer. Upload daarom eerst
+     alles behalve de map lib/fonts, en daarna de lettertypes in delen van
+     maximaal 100 bestanden (behoud de mapnaam lib/fonts). Makkelijker kan met
+     het gratis programma GitHub Desktop: daar sleept u alles in één keer.
+  4. Ga naar Settings > Pages. Bij "Branch" kies "main" en "/ (root)", klik "Save".
+  5. Na 1–2 minuten staat de app op:  https://UW-NAAM.github.io/pdf-studio/
+  Let op: deze pagina is openbaar. Er staan geen documenten op (die blijven
+  altijd op uw toestel), alleen de tool zelf. Controleer wel dat u het logo
+  mag publiceren (zie punt 4).
+
+Stap B — installeren op het toestel (heeft internet nodig, alleen deze ene keer)
+  Android: open het adres in Chrome > menu (⋮) > "App installeren" of
+           "Toevoegen aan startscherm".
+  GrapheneOS: open het adres in Vanadium (standaardbrowser) > menu (⋮) >
+           "App installeren".
+  iPhone/iPad: open het adres in Safari > Deel-knop > "Zet op beginscherm".
+
+Stap C — volledig offline maken
+  Open PDF Studio vanaf het beginscherm. Onderaan de startpagina staat
+  "Werkt offline". De gereedschappen werken dan al zonder internet.
+  Tik ook op "Alle lettertypes offline bewaren (± 95 MB)" zodat
+  'Tekst bewerken' ook offline elk lettertype heeft. Wacht tot er
+  "Alle lettertypes offline" staat.
+
+Bestanden opslaan op een telefoon
+  Android/GrapheneOS: het bestand komt in Downloads.
+  iPhone/iPad: er verschijnt "Opslaan of delen"; kies "Bewaar in Bestanden".
+
+Bediening op een telefoon
+  - Editor: tik op tekst om ze te wijzigen; tik op de balk onderaan om de
+    eigenschappen (lettertype, grootte, kleur) open te schuiven.
+  - Pagina's ordenen: gebruik de pijltjes onder elke miniatuur.
+  - Inzoomen: met de + en − knoppen of met twee vingers.
+
+
+3. UPDATES
+----------
+Een nieuwe versie zet u op dezelfde plaats (de bestanden in GitHub vervangen,
+of een nieuwe ZIP uitpakken). Toestellen halen de nieuwe versie automatisch op
+de volgende keer dat ze online zijn en de app openen.
+
+
+4. LOGO EN ICONEN
+-----------------
+  logo.png ......................... logo in de kopbalk
+  icons/icon-192.png, icon-512.png . app-icoon
+  icons/icon-maskable-512.png ...... app-icoon Android (met witrand)
+  icons/apple-touch-icon.png ....... app-icoon iPhone/iPad
+Vervang deze bestanden door eigen afbeeldingen met dezelfde naam en afmetingen.
+Het huidige logo is een stockafbeelding met watermerk ("pngtree"); voor
+openbaar gebruik heeft u daarvoor normaal een licentie nodig.
+
+
+5. LICENTIES
+------------
+PDF Studio gebruikt alleen open-source onderdelen. De licenties staan in de map
+"licenses": pdf-lib (MIT), pdf.js (Apache 2.0), fontkit (MIT), fflate (MIT) en
+lettertypes onder de SIL Open Font License, Apache 2.0, de GUST Font License,
+de Bitstream Vera-licentie en de Liberation-licentie. Deze mogen vrij gebruikt
+en verspreid worden, ook buiten een bedrijf.
+
+
+6. WAT (NOG) NIET KAN
+---------------------
+PDF naar Word, Word naar PDF, OCR, PDF/A en scan opschonen staan op
+"Binnenkort": daarvoor is zware conversiesoftware nodig die niet in een
+browser draait.

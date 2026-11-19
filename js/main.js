@@ -1,5 +1,5 @@
 // PDF Studio — startpagina, routing en het gedeelde toolscherm
-import { loadLibs, el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
+import { loadLibs, modal, el, icon, toast, readBytes, fmtBytes, isPdfFile, isImageFile, probePdf, openPdfJs, renderPage, saveFile, zip, bytesToPdfJs } from './core.js';
 import { PageGrid } from './grid.js';
 import { startI18n, langSwitch, tr, lang } from './i18n.js';
 const IMPL = {};
@@ -153,6 +153,7 @@ function renderTool(def) {
   ctx.changed = (key) => { def.onChange && def.onChange(ctx, key); updateSummary(); if (def.preview) { clearTimeout(pvTimer); pvTimer = setTimeout(() => preview(), 350); } };
   ctx.refresh = () => { renderList(); renderAside(); if (def.renderMain) def.renderMain(ctx, custom); };
   ctx.showResult = showResult;
+  window.__toolAddFiles = { id: def.id, accepts: (f) => (input.test || (input.kind === 'image' ? isImageFile : input.kind === 'pdf+image' ? (x) => isPdfFile(x) || isImageFile(x) : isPdfFile))(f), add: (fl) => addFiles(fl) };
 
   async function addFiles(fl) {
     let arr = [...fl];
@@ -338,6 +339,43 @@ async function route() {
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
+
+/* ---------------- Bestanden openen: van het app-icoon, 'Openen met', delen (telefoon) of slepen ---------------- */
+const isDocx = (f) => /\.docx$/i.test(f.name) || /wordprocessingml/.test(f.type);
+async function go(target) { if (location.hash.replace(/^#/, '') !== target) { history.pushState(null, '', '#' + target); } await route(); }
+export async function openIncoming(files) {
+  files = [...files].filter(Boolean); if (!files.length) return;
+  const pdfs = files.filter(isPdfFile), docs = files.filter(isDocx), imgs = files.filter(isImageFile);
+  if (pdfs.length === 1 && files.length === 1) {
+    const cur = location.hash.replace(/^#/, ''); const inEditor = !!document.querySelector('.editor') && window.__editorOpen;
+    if (inEditor && window.__editor && window.__editor.pdf && window.__editor.dirty) { const ok = await modal({ title: 'Ander bestand openen?', body: el('p', null, 'De wijzigingen in het huidige document zijn nog niet opgeslagen en gaan verloren.'), ok: 'Openen' }); if (!ok) return; }
+    if (!inEditor) await go(META[cur] && cur.startsWith('edit') ? cur : 'edit-text');
+    return window.__editorOpen && window.__editorOpen(pdfs[0]);
+  }
+  const target = pdfs.length > 1 ? 'merge' : docs.length ? 'word-to-pdf' : imgs.length ? 'images-to-pdf' : null;
+  if (!target) { toast('Dit bestandstype kan PDF Studio niet openen.', 'error'); return; }
+  await go(target); const t = window.__toolAddFiles; if (t && t.id === target) t.add(files.filter(t.accepts));
+}
+// 1. app-icoon / 'Openen met' (geïnstalleerde app, Chrome en Edge)
+if ('launchQueue' in window) window.launchQueue.setConsumer(async (lp) => { if (lp.files && lp.files.length) { const fs = await Promise.all(lp.files.map((h) => h.getFile())); ensureModules().then(() => openIncoming(fs)); } });
+// 2. gedeeld vanuit een andere app (Android): de service worker bewaart de bestanden even
+(async () => {
+  if (!/[?&]shared=1/.test(location.search) || !('caches' in window)) return;
+  try { const c = await caches.open('pdfstudio-share'); const keys = await c.keys(); const fs = []; for (const k of keys) { const res = await c.match(k); fs.push(new File([await res.blob()], decodeURIComponent(res.headers.get('X-Name') || 'gedeeld.pdf'), { type: res.headers.get('Content-Type') || '' })); await c.delete(k); }
+    history.replaceState(null, '', location.pathname + location.hash); await ensureModules(); openIncoming(fs); } catch (e) { console.warn('delen', e); }
+})();
+// 3. slepen naar het venster (ook buiten de gewone sleepvakken)
+let dragDepth = 0; const dragHint = el('div', { class: 'drag-hint', 'aria-hidden': 'true' }, el('div', null, icon('upload', 36, '#fff'), el('span', null, 'Laat los om te openen in PDF Studio')));
+const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; dragDepth++; if (!dragHint.isConnected) document.body.append(dragHint); });
+addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragHint.remove(); });
+addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener('drop', (e) => {
+  dragDepth = 0; dragHint.remove(); if (!hasFiles(e) || e.defaultPrevented) return; e.preventDefault();
+  const files = [...e.dataTransfer.files]; const t = window.__toolAddFiles; const cur = location.hash.replace(/^#/, '');
+  if (t && t.id === cur && document.querySelector('.tool') && files.every(t.accepts)) { t.add(files); return; } // op een hulpmiddel: daaraan toevoegen
+  openIncoming(files);
+});
 startI18n();
 route();
 export { META };

@@ -1,7 +1,8 @@
-// ABN PDF Studio — editor (tekst bewerken, annoteren, tekenen, formulieren, handtekening, redigeren)
-import { tr } from './i18n.js';
+// PDF Studio — editor (tekst bewerken, annoteren, tekenen, formulieren, handtekening, redigeren)
+import { tr, L } from './i18n.js';
 import { rewritePage, fontsForItems, embedFallbackFont, ensureFontkit, setSubset } from './textengine.js';
 import { addOwnFont, loadOwnFonts, ownFonts, localFontsSupported, findLocalFonts } from './fontlib.js';
+import { makeCanvas, canvasBlob, loadBitmap, bmpW, bmpH } from './core.js';
 import { el, icon, toast, modal, readBytes, isPdfFile, isImageFile, probePdf, openPdfJs, loadPdf, saveFile, baseName, PDFLib, pdfjsLib, safeText, hexToRgb, bytesToPdfJs } from './core.js';
 
 const { PDFName, PDFHexString, PDFString, StandardFonts, degrees, BlendMode, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList } = PDFLib;
@@ -55,30 +56,35 @@ function stdFont(fam, bold, italic) {
 const today = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`; };
 const rgbHex = (r, g, b) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
 
+let CLIP = null; // { objs, assets, text, t }
 /* ---------- Editor ---------- */
 function page(app, { topbar, id }) {
-  document.title = 'Editor – ABN PDF Studio';
+  document.title = 'Editor – PDF Studio';
   const [tab0, tool0] = MODE_FROM_HASH[id] || ['edit', 'textedit'];
   const S = { mscale: { ratio: +lsGet('pdfstudio-mscale', 1), unit: lsGet('pdfstudio-munit', 'm'), cal: null }, stamp: { kind: 'approved', text: '', name: lsGet('pdfstudio-stampname', ''), date: true }, file: null, pdf: null, pages: [], scale: 1, tab: tab0, tool: tool0, objs: [], sel: null, hist: [], fut: [], assets: new Map(), fields: [], formVals: {}, flattenForm: false, seq: 0, dirty: false };
   window.__editor = S; // voor tests
 
   const fileIn = el('input', { type: 'file', accept: '.pdf,application/pdf', class: 'sr', id: 'file-in', 'aria-label': 'PDF openen' });
-  const imgIn = el('input', { type: 'file', accept: 'image/png,image/jpeg', class: 'sr', id: 'img-in', 'aria-label': 'Afbeelding kiezen' });
+  const imgIn = el('input', { type: 'file', accept: 'image/*', class: 'sr', id: 'img-in', 'aria-label': 'Afbeelding kiezen' });
   const nameEl = el('span', { class: 'ed-name' }, 'Geen bestand geopend');
   const undoBtn = el('button', { class: 'btn icon', type: 'button', 'aria-label': 'Ongedaan maken', onclick: () => undo() }, icon('undo', 20));
   const redoBtn = el('button', { class: 'btn icon', type: 'button', 'aria-label': 'Opnieuw', onclick: () => redo() }, icon('redo', 20));
-  const saveBtn = el('button', { class: 'btn pri', type: 'button', id: 'ed-save', onclick: () => save() }, icon('download', 18, '#fff'), 'Opslaan als PDF');
+  const saveBtn = el('button', { class: 'btn pri', type: 'button', id: 'ed-save', onclick: () => save() }, icon('download', 18, '#fff'), el('span', { class: 'lbl-long' }, 'Opslaan als PDF'), el('span', { class: 'lbl-short' }, 'Opslaan'));
   const tabsEl = el('nav', { class: 'ed-tabs', role: 'tablist', 'aria-label': 'Gereedschapsgroepen' });
   const ribbon = el('div', { class: 'ed-ribbon', role: 'toolbar', 'aria-label': 'Gereedschappen' });
   const thumbs = el('aside', { class: 'ed-thumbs', 'aria-label': 'Paginaminiaturen' });
   const stage = el('main', { class: 'ed-stage', id: 'ed-stage' });
-  const props = el('aside', { class: 'ed-props', 'aria-label': 'Eigenschappen' });
+  const propsWrap = el('aside', { class: 'ed-props', 'aria-label': 'Eigenschappen' });
+  const sheetBtn = el('button', { type: 'button', class: 'ed-sheet-handle', 'aria-expanded': 'false', onclick: () => sheet(!propsWrap.classList.contains('open')) }, el('span', { id: 'sheet-title' }, 'Eigenschappen'), el('span', { 'aria-hidden': 'true' }, '⌃'));
+  const props = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
+  propsWrap.append(sheetBtn, props);
+  const sheet = (open) => { propsWrap.classList.toggle('open', open); sheetBtn.setAttribute('aria-expanded', String(open)); };
   const status = el('footer', { class: 'ed-status' });
 
   app.replaceChildren(
     topbar(el('div', { class: 'ed-top' }, nameEl, undoBtn, redoBtn,
       el('a', { class: 'btn', href: '#' }, icon('grid', 18), 'Toolbox'), saveBtn)),
-    el('div', { class: 'editor' }, tabsEl, ribbon, el('div', { class: 'ed-body' }, thumbs, stage, props), status), fileIn, imgIn);
+    el('div', { class: 'editor' }, tabsEl, ribbon, el('div', { class: 'ed-body' }, thumbs, stage, propsWrap), status), fileIn, imgIn);
 
   /* ----- Lint ----- */
   function drawRibbon() {
@@ -104,7 +110,7 @@ function page(app, { topbar, id }) {
   /* ----- Openen ----- */
   function emptyStage() {
     const drop = el('div', { class: 'drop ed-drop' }, icon('upload', 32, '#1B93A5'), el('span', { style: { fontSize: '16px' } }, 'Sleep een PDF hierheen of'),
-      el('button', { class: 'btn pri', type: 'button', onclick: () => fileIn.click() }, 'PDF openen'), el('span', { class: 'hint' }, 'Het bestand blijft op uw computer.'));
+      el('button', { class: 'btn pri', type: 'button', onclick: () => fileIn.click() }, 'PDF openen'), el('span', { class: 'hint' }, 'Het bestand blijft op uw toestel.'));
     drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); openFile(e.dataTransfer.files[0]); });
@@ -139,7 +145,7 @@ function page(app, { topbar, id }) {
   async function buildPages() {
     stage.innerHTML = ''; thumbs.innerHTML = ''; S.pages = [];
     const first = await S.pdf.getPage(1); const vp1 = first.getViewport({ scale: 1 });
-    S.scale = Math.min(1.6, Math.max(0.5, (stage.clientWidth - 64) / vp1.width));
+    S.scale = Math.min(1.6, Math.max(0.3, (stage.clientWidth - (stage.clientWidth < 700 ? 24 : 64)) / vp1.width));
     const wrap = el('div', { class: 'ed-pages' });
     for (let i = 1; i <= S.pdf.numPages; i++) {
       const p = await S.pdf.getPage(i); const vp = p.getViewport({ scale: 1 });
@@ -170,41 +176,62 @@ function page(app, { topbar, id }) {
     if (pg.rendered === S.scale || pg.busy) return; pg.busy = true;
     const src = pg.view || pg.p; const dpr = Math.min(window.devicePixelRatio || 1, 2); const vp = src.getViewport({ scale: S.scale * dpr });
     const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    const textP = pg.textItems ? null : loadText(pg).then(() => drawTextLayer(pg)).catch(() => {}); // tekst lezen (en aanklikbaar maken) terwijl de pagina tekent
     try { await src.render({ canvas: c, viewport: vp }).promise; } catch (e) { pg.busy = false; return; }
+    if (textP) await textP;
     c.className = 'ed-canvas'; pg.canvas.replaceWith(c); pg.canvas = c; pg.dpr = dpr;
     pg.rendered = S.scale; pg.busy = false;
     if (!pg.textItems) await loadText(pg);
     drawTextLayer(pg);
   }
-  async function loadText(pg) {
-    const tc = await pg.p.getTextContent(); const items = [];
+  // Gedraaide tekst (bv. verticale maten op plannen) krijgt een eigen assenstelsel waarin ze horizontaal ligt:
+  // frame = R(-rot) · kijkcoördinaten. Zo werkt de tekstmotor er ongewijzigd op.
+  const rotM = (a) => [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 0, 0];
+  const frameT = (pg, rot) => (rot ? pdfjsLib.Util.transform(rotM(-rot), pg.vp.transform) : pg.vp.transform);
+  const toView = (rot, x, y) => (rot ? [x * Math.cos(rot) - y * Math.sin(rot), x * Math.sin(rot) + y * Math.cos(rot)] : [x, y]);
+  const fromView = (rot, x, y) => toView(-rot, x, y);
+  const vbox = (rot, x, y, w, h) => { if (!rot) return { x, y, w, h }; const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([a, b]) => toView(rot, a, b)); const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]); return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; };
+  const libDoc = () => S.libDocP || (S.libDocP = loadPdf(S.file));
+  function loadText(pg) { return pg.textP || (pg.textP = loadText0(pg).catch((e) => { pg.textP = null; throw e; })); }
+  async function loadText0(pg) {
+    const tc = await pg.p.getTextContent(); const items = []; const V = pg.vp.transform;
     for (const it of tc.items) {
       if (!it.str || !it.str.trim()) continue;
-      const tx = pdfjsLib.Util.transform(pg.vp.transform, it.transform);
-      if (Math.abs(tx[1]) > 0.01 || Math.abs(tx[2]) > 0.01 || tx[0] <= 0) continue; // alleen horizontale tekst
+      let tx = pdfjsLib.Util.transform(V, it.transform);
+      const len = Math.hypot(tx[0], tx[1]), hgt = Math.hypot(tx[2], tx[3]); if (len <= 0 || hgt <= 0) continue;
+      const det = tx[0] * tx[3] - tx[1] * tx[2]; if (det >= 0 || Math.abs((tx[0] * tx[2] + tx[1] * tx[3]) / (len * hgt)) > 0.03) continue; // gespiegeld of scheef
+      let rot = Math.atan2(tx[1], tx[0]); const q = Math.round(rot / (Math.PI / 2)) * (Math.PI / 2); if (Math.abs(rot - q) < 0.01) rot = q; if (Math.abs(rot) < 1e-6) rot = 0;
+      if (rot) tx = pdfjsLib.Util.transform(frameT(pg, rot), it.transform);
       const st = tc.styles[it.fontName] || {}; const fh = Math.hypot(tx[2], tx[3]);
       const asc = st.ascent || 0.8, desc = Math.abs(st.descent || -0.2);
       let fontId = '', fb = false, fi = false; try { if (pg.p.commonObjs.has(it.fontName)) { const fo = pg.p.commonObjs.get(it.fontName); fontId = (fo.loadedName || '') + ' ' + (fo.fallbackName || ''); fb = !!(fo.bold || fo.black); fi = !!fo.italic; } } catch {}
       const fam = /mono|courier/i.test(st.fontFamily + fontId) ? 'Courier' : /serif/i.test(st.fontFamily) && !/sans/i.test(st.fontFamily) || /times|georgia|garamond|cambria/i.test(fontId) ? 'Times' : 'Helvetica';
-      items.push({ str: it.str, x: tx[4], base: tx[5], top: tx[5] - fh * asc, w: it.width * pg.vp.scale, h: fh * (asc + desc), size: fh, asc, fam, bold: fb || /bold|black|heavy|semibold/i.test(fontId), italic: fi || /italic|oblique/i.test(fontId) });
+      const w = st.vertical ? 0 : it.width * pg.vp.scale; if (!w) continue;
+      items.push({ str: it.str, x: tx[4], base: tx[5], top: tx[5] - fh * asc, w, h: fh * (asc + desc), size: fh, asc, fam, rot, bold: fb || /bold|black|heavy|semibold/i.test(fontId), italic: fi || /italic|oblique/i.test(fontId) });
     }
-    // echte lettertypenamen uit de PDF (vet, cursief, familie)
+    // echte lettertypenamen uit de PDF (vet, cursief, familie), per draaiing
     try {
-      if (!S.libDoc) S.libDoc = await loadPdf(S.file);
-      const fi = fontsForItems(S.libDoc, S.libDoc.getPages()[pg.i - 1], items, pg.vp.transform);
-      fi.forEach((f, k) => { if (f) { items[k].fam = f.fam; items[k].bold = items[k].bold || f.bold; items[k].italic = items[k].italic || f.italic; items[k].font = f.base; } });
+      const d = await libDoc(); const page = d.getPages()[pg.i - 1]; const groups = new Map();
+      items.forEach((it, k) => { const g = groups.get(it.rot) || []; g.push(k); groups.set(it.rot, g); });
+      for (const [rot, ks] of groups) { const fi = fontsForItems(d, page, ks.map((k) => items[k]), frameT(pg, rot)); fi.forEach((f, n) => { const it = items[ks[n]]; if (f) { it.fam = f.fam; it.bold = it.bold || f.bold; it.italic = it.italic || f.italic; it.font = f.base; } }); }
     } catch (e) { console.warn('lettertypen', e); }
     pg.textItems = items;
   }
+  // element in het assenstelsel van gedraaide tekst plaatsen: draaien rond de oorsprong van de pagina
+  function rotNode(n, rot, x, y) { n.style.transformOrigin = `${-x * S.scale}px ${-y * S.scale}px`; n.style.transform = `rotate(${rot}rad)`; }
   function drawTextLayer(pg) {
     pg.textLayer.innerHTML = '';
     if (S.tool !== 'textedit' || !pg.textItems) return;
+    const frag = document.createDocumentFragment(); const done = new Set(S.objs.filter((o) => o.type === 'textedit' && o.page === pg.i).map((o) => o.src));
     for (const [k, it] of pg.textItems.entries()) {
-      if (S.objs.some((o) => o.type === 'textedit' && o.page === pg.i && o.src === k)) continue;
-      pg.textLayer.append(el('button', { type: 'button', class: 'ed-tspan', 'data-k': k, title: it.str, 'aria-label': 'Tekst bewerken: ' + it.str,
+      if (done.has(k)) continue;
+      const b = el('button', { type: 'button', class: 'ed-tspan' + (it.rot ? ' rot' : ''), 'data-k': k, title: it.str, 'aria-label': 'Tekst bewerken: ' + it.str,
         style: { left: it.x * S.scale + 'px', top: it.top * S.scale + 'px', width: Math.max(4, it.w) * S.scale + 'px', height: it.h * S.scale + 'px' },
-        onclick: (e) => { e.stopPropagation(); editText(pg, k); } }));
+        onclick: (e) => { e.stopPropagation(); editText(pg, k); } });
+      if (it.rot) rotNode(b, it.rot, it.x, it.top);
+      frag.append(b);
     }
+    pg.textLayer.append(frag);
   }
   function sample(pg, x, y, w, h) { // kleur van tekst (donkerst) en achtergrond (meest voorkomend aan de rand)
     const c = pg.canvas; if (!c || !pg.dpr) return { fg: '#000000', bg: '#ffffff' };
@@ -222,8 +249,8 @@ function page(app, { topbar, id }) {
     return { fg: rgbHex(...fg), bg: rgbHex(...bg) };
   }
   function editText(pg, k) {
-    const it = pg.textItems[k]; const col = sample(pg, it.x, it.top, it.w, it.h);
-    const o = add({ type: 'textedit', page: pg.i, src: k, x: it.x, y: it.top, w: it.w, h: it.h, base: it.base - it.top, orig: it.str, text: it.str, size: +it.size.toFixed(2), fam: it.fam, bold: it.bold, italic: it.italic, color: col.fg, bg: col.bg, style0: { fam: it.fam, bold: it.bold, italic: it.italic, size: +it.size.toFixed(2), color: col.fg } });
+    const it = pg.textItems[k]; const vb = vbox(it.rot, it.x, it.top, it.w, it.h); const col = sample(pg, vb.x, vb.y, vb.w, vb.h);
+    const o = add({ type: 'textedit', rot: it.rot || 0, page: pg.i, src: k, x: it.x, y: it.top, w: it.w, h: it.h, base: it.base - it.top, orig: it.str, text: it.str, size: +it.size.toFixed(2), fam: it.fam, bold: it.bold, italic: it.italic, color: col.fg, bg: col.bg, style0: { fam: it.fam, bold: it.bold, italic: it.italic, size: +it.size.toFixed(2), color: col.fg } });
     drawTextLayer(pg); select(o.id, true);
   }
 
@@ -236,7 +263,7 @@ function page(app, { topbar, id }) {
     for (const pg of S.pages) {
       const sig = JSON.stringify(S.objs.filter((o) => o.type === 'textedit' && o.page === pg.i).map((o) => [o.src, o.text, o.fam, o.bold, o.italic, o.size, o.color]));
       if (sig === (pg.pvSig || '[]')) continue; pg.pvSig = sig;
-      clearTimeout(pvTimers.get(pg.i)); pvTimers.set(pg.i, setTimeout(() => preview(pg, sig), 250));
+      clearTimeout(pvTimers.get(pg.i)); pvTimers.set(pg.i, setTimeout(() => preview(pg, sig), 120));
     }
   }
   async function preview(pg, sig) {
@@ -260,12 +287,16 @@ function page(app, { topbar, id }) {
   function add(o) { o.id = ++S.seq; S.objs.push(o); commit(); drawObjects(); return o; }
   function remove(oid) { const o = S.objs.find((x) => x.id === oid); S.objs = S.objs.filter((x) => x.id !== oid); if (S.sel === oid) S.sel = null; commit(); drawObjects(); if (o && o.type === 'textedit') drawTextLayer(S.pages[o.page - 1]); drawProps(); }
   function selObj() { return S.objs.find((o) => o.id === S.sel); }
-  function select(oid, focus) { S.sel = oid; drawObjects(); drawProps(); if (focus) { const go = () => { const n = stage.querySelector(`.ed-obj[data-id="${oid}"] .ed-edit`); if (n) { n.focus(); const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } }; go(); requestAnimationFrame(go); } }
+  function select(oid, focus) { S.sel = oid; drawObjects(); drawProps(); if (matchMedia('(max-width:760px)').matches) sheet(!!oid && !focus); if (focus) { const go = () => { const n = stage.querySelector(`.ed-obj[data-id="${oid}"] .ed-edit`); if (n) { n.focus(); const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } }; go(); requestAnimationFrame(go); } }
   function update(o, patch, noCommit) { Object.assign(o, patch); if (!noCommit) commit(); drawObjects(); }
 
   function drawObjects() {
+    // wie aan het typen is, mag zijn focus en cursor niet verliezen als een voorbeeld op de achtergrond klaar is
+    const ae = document.activeElement; const host = ae && ae.classList && ae.classList.contains('ed-edit') ? ae.closest('.ed-obj') : null;
+    let keep = null; if (host && String(S.sel) === host.dataset.id) { const sel = getSelection(); let off = ae.innerText.length; try { if (sel.rangeCount && ae.contains(sel.anchorNode)) { const r = document.createRange(); r.selectNodeContents(ae); r.setEnd(sel.anchorNode, sel.anchorOffset); off = r.toString().length; } } catch {} keep = { id: host.dataset.id, off }; }
     for (const pg of S.pages) pg.layer.innerHTML = '';
     for (const o of S.objs) { const pg = S.pages[o.page - 1]; if (pg) pg.layer.append(objNode(o)); }
+    if (keep) { const n = stage.querySelector(`.ed-obj[data-id="${keep.id}"] .ed-edit`); if (n) { n.focus({ preventScroll: true }); try { const w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT); let left = keep.off, t, placed = false; while ((t = w.nextNode())) { if (left <= t.length) { const r = document.createRange(); r.setStart(t, left); r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); placed = true; break; } left -= t.length; } if (!placed) { const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } } catch {} } }
   }
   function objNode(o) {
     const s = S.scale; const sel = o.id === S.sel;
@@ -278,6 +309,7 @@ function page(app, { topbar, id }) {
       t.addEventListener('focus', () => { if (S.sel !== o.id) { S.sel = o.id; n.classList.add('sel'); drawProps(); } });
       t.addEventListener('input', () => { o.text = t.innerText.replace(/\n$/, ''); S.dirty = true; if (o.type === 'textedit') { o.w = Math.max(o.w, t.scrollWidth / s); n.style.width = o.w * s + 'px'; } });
       t.addEventListener('blur', () => { const now = snapshot(); if (now !== S._last) commit(); });
+      t.addEventListener('paste', (e) => { e.preventDefault(); e.stopPropagation(); let tx = (e.clipboardData && e.clipboardData.getData('text/plain')) || ''; if (o.type === 'textedit') tx = tx.replace(/\s*[\r\n]+\s*/g, ' '); document.execCommand('insertText', false, tx); });
       t.addEventListener('keydown', (e) => { if (e.key === 'Escape') { t.blur(); select(null); } if (o.type === 'textedit' && e.key === 'Enter') { e.preventDefault(); t.blur(); } });
       n.append(t);
     } else if (o.type === 'image') {
@@ -311,11 +343,11 @@ function page(app, { topbar, id }) {
     if (['rect', 'ellipse'].includes(o.type)) { n.style.border = `${o.width * s}px solid ${o.color}`; n.style.background = o.fill || 'transparent'; if (o.type === 'ellipse') n.style.borderRadius = '50%'; }
     if (o.type === 'highlight') n.style.background = o.color;
     if (o.type === 'underline' || o.type === 'strike') n.style.setProperty('--lc', o.color);
+    if (o.rot) rotNode(n, o.rot, o.x, o.y);
     n.addEventListener('pointerdown', (e) => objPointer(e, o, n));
     if (sel && !['comment', 'measure'].includes(o.type)) {
       n.append(el('span', { class: 'ed-handle', 'aria-hidden': 'true', 'data-h': '1' }));
     }
-    if (sel && (o.type === 'text' || o.type === 'textedit')) n.append(el('span', { class: 'ed-grip', role: 'img', 'aria-label': 'Verplaatsen', title: 'Slepen om te verplaatsen' }, '✥ ', el('span', null, 'Verplaatsen')));
     if (sel) n.append(el('button', { type: 'button', class: 'ed-del', 'aria-label': 'Verwijderen', onclick: (e) => { e.stopPropagation(); remove(o.id); } }, icon('x', 14, '#fff', 2.5)));
     return n;
   }
@@ -358,7 +390,7 @@ function page(app, { topbar, id }) {
     const sx = e.clientX, sy = e.clientY; const start = { x: o.x, y: o.y, w: o.w, h: o.h, pts: o.pts && o.pts.map((p) => [...p]), line: o.line && [...o.line] };
     let moved = false;
     const mv = (ev) => {
-      const dx = (ev.clientX - sx) / S.scale, dy = (ev.clientY - sy) / S.scale; if (!moved && Math.hypot(dx, dy) < 2) return; moved = true;
+      let dx = (ev.clientX - sx) / S.scale, dy = (ev.clientY - sy) / S.scale; if (!moved && Math.hypot(dx, dy) < 2) return; moved = true; if (o.rot) [dx, dy] = fromView(o.rot, dx, dy);
       if (handle) {
         let w = Math.max(8, start.w + dx), h = Math.max(8, start.h + dy);
         if (o.type === 'image' && o.keep !== false) h = w * start.h / start.w;
@@ -369,7 +401,7 @@ function page(app, { topbar, id }) {
         if (o.pts) o.pts = start.pts.map(([px, py]) => [px + dx, py + dy]);
         if (o.line) o.line = [start.line[0] + dx, start.line[1] + dy, start.line[2] + dx, start.line[3] + dy];
       }
-      const node = stage.querySelector(`.ed-obj[data-id="${o.id}"]`); if (node) { node.style.left = o.x * S.scale + 'px'; node.style.top = o.y * S.scale + 'px'; node.style.width = o.w * S.scale + 'px'; node.style.height = o.h * S.scale + 'px'; }
+      const node = stage.querySelector(`.ed-obj[data-id="${o.id}"]`); if (node) { node.style.left = o.x * S.scale + 'px'; node.style.top = o.y * S.scale + 'px'; node.style.width = o.w * S.scale + 'px'; node.style.height = o.h * S.scale + 'px'; if (o.rot) rotNode(node, o.rot, o.x, o.y); }
     };
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (moved) { commit(); drawObjects(); } else if (['text', 'textedit'].includes(o.type)) select(o.id, true); };
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
@@ -498,8 +530,10 @@ function page(app, { topbar, id }) {
   imgIn.addEventListener('change', async () => {
     const f = imgIn.files[0]; imgIn.value = ''; if (!f || !isImageFile(f)) return;
     let bytes = await readBytes(f); let kind = /png/i.test(f.type) ? 'png' : 'jpg';
-    if (!/png|jpe?g/i.test(f.type)) { const bmp = await createImageBitmap(f); const c = new OffscreenCanvas(bmp.width, bmp.height); c.getContext('2d').drawImage(bmp, 0, 0); bytes = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer()); kind = 'png'; }
-    const bmp = await createImageBitmap(new Blob([bytes])); placeImage(bytes, kind, bmp.width, bmp.height, 220); setTool('select');
+    const bmp0 = await loadBitmap(f);
+    // altijd via canvas: EXIF-draaiing van telefoonfoto's en formaten als HEIC/WebP worden zo correct omgezet
+    if (!/png/i.test(f.type)) { const c = makeCanvas(bmpW(bmp0), bmpH(bmp0)); const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp0, 0, 0); bytes = new Uint8Array(await (await canvasBlob(c, 'image/jpeg', 0.92)).arrayBuffer()); kind = 'jpg'; }
+    placeImage(bytes, kind, bmpW(bmp0), bmpH(bmp0), 220); setTool('select');
   });
   function currentPage() { const r = stage.getBoundingClientRect(); let best = S.pages[0], d = 1e9; for (const pg of S.pages) { const b = pg.el.getBoundingClientRect(); const dd = Math.abs(b.top + Math.min(b.height, r.height) / 2 - (r.top + r.height / 2)); if (b.bottom > r.top && dd < d) { d = dd; best = pg; } } return best; }
   function placeImage(bytes, kind, iw, ih, width, extra = {}) {
@@ -507,96 +541,25 @@ function page(app, { topbar, id }) {
     const w = Math.min(width, pg.w * 0.8), h = w * ih / iw;
     const o = add({ type: 'image', page: pg.i, x: (pg.w - w) / 2, y: Math.max(20, (pg.h - h) / 2), w, h, asset: aid, opacity: 1, ...extra }); select(o.id);
   }
-  /* Opgeslagen handtekeningen: alleen in deze browser (localStorage), nooit verstuurd. */
-  const SIG_KEY = 'pdfstudio-signatures';
-  const sigLoad = () => { try { const a = JSON.parse(lsGet(SIG_KEY, '[]')); return Array.isArray(a) ? a.filter((x) => x && typeof x.id === 'string' && typeof x.png === 'string' && x.png.startsWith('data:image/png;base64,')).map((x) => ({ ...x, name: typeof x.name === 'string' ? x.name : '' })) : []; } catch { return []; } };
-  const sigSave = (a) => { try { localStorage.setItem(SIG_KEY, JSON.stringify(a)); return true; } catch { return false; } };
-  const loadCanvasFromUrl = (url) => new Promise((res, rej) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); res(c); }; im.onerror = rej; im.src = url; });
-  // Foto of scan van een handtekening naar een canvas; wit papier wordt desgewenst transparant.
-  async function fileToSigCanvas(file, transparent) {
-    const bmp = await createImageBitmap(file); const k = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
-    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0, c.width, c.height);
-    if (transparent) {
-      const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
-      for (let i = 0; i < d.length; i += 4) { const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; const a = lum >= 235 ? 0 : lum > 170 ? Math.round(255 * (235 - lum) / 65) : 255; d[i + 3] = Math.min(d[i + 3], a); }
-      g.putImageData(im, 0, 0);
-    }
-    return c;
-  }
   async function signatureDialog() {
-    let mode = 'draw', savedSel = null, imgFile = null, imgCanvas = null, drawn = false, down = false;
-    let saved = sigLoad();
     const c = el('canvas', { width: 560, height: 200, class: 'sigpad', 'aria-label': 'Tekenvlak voor handtekening' });
-    const g = c.getContext('2d'); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#000000';
+    const g = c.getContext('2d'); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#0b2a6b'; let drawn = false, down = false;
     c.addEventListener('pointerdown', (e) => { down = true; drawn = true; const r = c.getBoundingClientRect(); g.beginPath(); g.moveTo((e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height); c.setPointerCapture(e.pointerId); });
     c.addEventListener('pointermove', (e) => { if (!down) return; const r = c.getBoundingClientRect(); g.lineTo((e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height); g.stroke(); });
     c.addEventListener('pointerup', () => { down = false; });
     const typed = el('input', { type: 'text', id: 'sig-text', placeholder: 'Of typ uw naam', autocomplete: 'name' });
-    // Afbeelding
-    const fileIn = el('input', { type: 'file', id: 'sig-file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp' });
-    const transp = el('input', { type: 'checkbox', id: 'sig-transp', checked: true });
-    const prev = el('canvas', { class: 'sigpad sigprev', width: 560, height: 200, 'aria-label': 'Voorbeeld van de afbeelding' });
-    const refreshImg = async () => {
-      if (!imgFile) return; try { imgCanvas = await fileToSigCanvas(imgFile, transp.checked); } catch { imgCanvas = null; toast('Deze afbeelding kan niet worden gelezen.', 'error'); return; }
-      const pg = prev.getContext('2d'); pg.clearRect(0, 0, prev.width, prev.height); const t = trimCanvas(imgCanvas); const k = Math.min(prev.width / t.width, prev.height / t.height, 1); const w = t.width * k, h = t.height * k; pg.drawImage(t, (prev.width - w) / 2, (prev.height - h) / 2, w, h);
-    };
-    fileIn.addEventListener('change', () => { imgFile = fileIn.files[0] || null; if (imgFile && !isImageFile(imgFile)) { imgFile = null; toast('Kies een afbeelding (PNG, JPG of WebP).', 'error'); return; } refreshImg(); });
-    transp.addEventListener('change', refreshImg);
-    // Panelen en tabs
-    const panels = {
-      draw: el('div', { class: 'sig-panel' }, el('div', { class: 'help' }, 'Teken met muis, pen of vinger in het vak.'), c,
-        el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, el('button', { type: 'button', class: 'btn sm', onclick: () => { g.clearRect(0, 0, c.width, c.height); drawn = false; } }, 'Wissen'))),
-      type: el('div', { class: 'sig-panel', hidden: true }, el('div', { class: 'field' }, el('label', { for: 'sig-text' }, 'Getypte handtekening'), typed)),
-      image: el('div', { class: 'sig-panel', hidden: true }, el('div', { class: 'help' }, 'Kies een foto of scan van uw handtekening (PNG, JPG of WebP). Teken ze het best met donkere inkt op wit papier.'), fileIn,
-        el('label', { class: 'check', for: 'sig-transp' }, transp, 'Witte achtergrond transparant maken'), prev),
-    };
-    const tabBtns = {};
-    const setMode = (m) => { mode = m; savedSel = null; Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== m; }); Object.entries(tabBtns).forEach(([k, b]) => b.setAttribute('aria-pressed', String(k === m))); renderSaved(); };
-    const tabs = el('div', { class: 'seg h', role: 'group', 'aria-label': 'Manier van invoeren' }, ...[['draw', 'Tekenen'], ['type', 'Typen'], ['image', 'Afbeelding']].map(([k, label]) => (tabBtns[k] = el('button', { type: 'button', 'aria-pressed': String(k === mode), onclick: () => setMode(k) }, label))));
-    // Bewaren
-    const keep = el('input', { type: 'checkbox', id: 'sig-keep', onchange: () => { nameRow.hidden = !keep.checked || !!savedSel; if (keep.checked) nameIn.focus(); } });
-    const nameIn = el('input', { type: 'text', id: 'sig-name', maxlength: '40', placeholder: 'bv. Jan Peeters', autocomplete: 'off' });
-    const nameRow = el('div', { class: 'field', hidden: true }, el('label', { for: 'sig-name' }, 'Naam bij deze handtekening'), nameIn);
-    const keepRow = el('label', { class: 'check', for: 'sig-keep' }, keep, 'Bewaar deze handtekening voor later gebruik (alleen in deze browser)');
-    // Opgeslagen lijst
-    const savedBox = el('div', { class: 'sig-saved' });
-    function renderSaved() {
-      savedBox.innerHTML = ''; savedBox.hidden = !saved.length; if (!saved.length) return;
-      savedBox.append(el('div', { class: 'flabel' }, 'Opgeslagen handtekeningen'), el('div', { class: 'sig-grid' }, ...saved.map((s) => el('div', { class: 'sig-item' },
-        el('button', { type: 'button', class: 'sig-pick', 'aria-pressed': String(savedSel === s.id), 'aria-label': 'Deze handtekening gebruiken' + (s.name ? ': ' + s.name : ''), title: s.name || '', onclick: () => { savedSel = savedSel === s.id ? null : s.id; renderSaved(); } }, el('img', { src: s.png, alt: '' }), el('span', { class: 'sig-name' }, s.name || 'Zonder naam')),
-        el('button', { type: 'button', class: 'sig-del', 'aria-label': 'Handtekening verwijderen', onclick: () => { saved = saved.filter((x) => x.id !== s.id); if (savedSel === s.id) savedSel = null; sigSave(saved); renderSaved(); } }, icon('x', 12, '#fff', 2.5))))));
-      keepRow.hidden = !!savedSel; nameRow.hidden = !!savedSel || !keep.checked; panelWrap.hidden = !!savedSel; tabs.hidden = !!savedSel;
-    }
-    const panelWrap = el('div', null, panels.draw, panels.type, panels.image);
-    const body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, savedBox, tabs, panelWrap, keepRow, nameRow);
-    renderSaved();
-    let result = null;
-    const ok = await modal({ title: 'Handtekening', body, ok: 'Plaatsen', onOk: async () => {
-      let src = null;
-      if (savedSel) { const s = saved.find((x) => x.id === savedSel); try { src = await loadCanvasFromUrl(s.png); } catch { toast('Deze opgeslagen handtekening kan niet worden geladen.', 'error'); return false; } }
-      else if (mode === 'draw') { if (!drawn) { toast('Teken eerst een handtekening.', 'error'); return false; } src = c; }
-      else if (mode === 'type') { if (!typed.value.trim()) { toast('Typ eerst uw naam.', 'error'); return false; } src = document.createElement('canvas'); src.width = 900; src.height = 220; const x = src.getContext('2d'); x.fillStyle = '#000000'; x.font = 'italic 110px "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive'; x.textBaseline = 'middle'; x.fillText(typed.value.trim(), 20, 115); }
-      else { if (!imgFile) { toast('Kies eerst een afbeelding.', 'error'); return false; } if (!imgCanvas) await refreshImg(); if (!imgCanvas) return false; src = imgCanvas; }
-      result = { src, fromSaved: !!savedSel, keep: keep.checked, name: nameIn.value.trim().slice(0, 40) }; return true;
-    } });
-    if (!ok || !result) { setTool('select'); return; }
-    let trimmed = trimCanvas(result.src); blackenInk(trimmed);
-    if (result.keep && !result.fromSaved) {
-      // kleine PNG bewaren (max. 600 px breed) zodat de opslag beperkt blijft
-      const k = Math.min(1, 600 / trimmed.width); const sm = document.createElement('canvas'); sm.width = Math.max(1, Math.round(trimmed.width * k)); sm.height = Math.max(1, Math.round(trimmed.height * k)); sm.getContext('2d').drawImage(trimmed, 0, 0, sm.width, sm.height);
-      const list = [{ id: Date.now().toString(36), name: result.name, png: sm.toDataURL('image/png') }, ...sigLoad()].slice(0, 8);
-      toast(sigSave(list) ? 'Handtekening opgeslagen.' : 'Opslaan is niet gelukt (opslag vol of geblokkeerd).', sigSave(list) ? undefined : 'error');
-    }
-    const blob = await new Promise((r) => trimmed.toBlob(r, 'image/png'));
+    const colorIn = el('select', { id: 'sig-color', onchange: () => { g.strokeStyle = colorIn.value; } }, el('option', { value: '#0b2a6b' }, 'Blauw'), el('option', { value: '#000000' }, 'Zwart'));
+    const body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+      el('div', { class: 'help' }, 'Teken met muis, pen of vinger in het vak, of typ uw naam.'), c,
+      el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, el('button', { type: 'button', class: 'btn sm', onclick: () => { g.clearRect(0, 0, c.width, c.height); drawn = false; } }, 'Wissen'), el('label', { for: 'sig-color', class: 'flabel' }, 'Kleur'), colorIn),
+      el('div', { class: 'field' }, el('label', { for: 'sig-text' }, 'Getypte handtekening'), typed));
+    const ok = await modal({ title: 'Handtekening', body, ok: 'Plaatsen', onOk: () => drawn || typed.value.trim() ? true : (toast('Teken of typ eerst een handtekening.', 'error'), false) });
+    if (!ok) { setTool('select'); return; }
+    let src = c;
+    if (!drawn) { src = document.createElement('canvas'); src.width = 900; src.height = 220; const x = src.getContext('2d'); x.fillStyle = colorIn.value; x.font = 'italic 110px "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive'; x.textBaseline = 'middle'; x.fillText(typed.value.trim(), 20, 115); }
+    const trimmed = trimCanvas(src); const blob = await new Promise((r) => trimmed.toBlob(r, 'image/png'));
     placeImage(new Uint8Array(await blob.arrayBuffer()), 'png', trimmed.width, trimmed.height, 170, { sig: true });
     setTool('select');
-  }
-  // Handtekeningen zijn altijd zwart: heeft de afbeelding een transparante achtergrond, dan wordt alle inkt zwart.
-  function blackenInk(c) {
-    const g = c.getContext('2d', { willReadFrequently: true }); const im = g.getImageData(0, 0, c.width, c.height), d = im.data; let clear = false;
-    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { clear = true; break; }
-    if (!clear) return; for (let i = 0; i < d.length; i += 4) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } g.putImageData(im, 0, 0);
   }
   function trimCanvas(c) {
     const g = c.getContext('2d'); const d = g.getImageData(0, 0, c.width, c.height).data; let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0;
@@ -607,7 +570,7 @@ function page(app, { topbar, id }) {
   /* ----- Eigenschappenpaneel ----- */
   function field(label, input) { if (!input.id) input.id = 'p-' + label.toLowerCase().replace(/\W+/g, '-'); return el('div', { class: 'field' }, el('label', { for: input.id }, label), input); }
   function drawProps() {
-    props.innerHTML = '';
+    props.innerHTML = ''; setTimeout(() => { const h = props.querySelector('h2'); const t = document.getElementById('sheet-title'); if (h && t) t.textContent = h.textContent; }, 0);
     const o = selObj();
     if (!S.pdf) { props.append(el('h2', null, 'Editor'), el('p', { class: 'help' }, 'Open een PDF om te beginnen. Alles wordt lokaal in uw browser verwerkt.')); return; }
     if (o) {
@@ -632,7 +595,7 @@ function page(app, { topbar, id }) {
         }
       } else if (o.type === 'link') {
         const u = el('input', { type: 'text', id: 'p-url', value: o.url, onchange: () => update(o, { url: u.value.trim() }) });
-        props.append(field('Webadres', u), el('div', { class: 'help' }, 'bv. https://www.abn-cleanroomtechnology.com'));
+        props.append(field('Webadres', u), el('div', { class: 'help' }, 'bv. https://www.voorbeeld.be'));
       } else if (o.type === 'comment') {
         const ta = el('textarea', { id: 'p-comment', rows: 5, onchange: () => update(o, { text: ta.value }) }); ta.value = o.text;
         props.append(field('Notitie', ta), el('div', { class: 'help' }, 'Wordt een echte PDF-opmerking die in Acrobat en andere lezers zichtbaar is.'));
@@ -672,6 +635,10 @@ function page(app, { topbar, id }) {
       } else if (o.type === 'redact') {
         props.append(el('div', { class: 'note-box' }, 'Bij opslaan wordt deze pagina omgezet naar een afbeelding met een zwart vlak. Zo is de onderliggende tekst echt weg en niet meer te kopiëren of te doorzoeken.'));
       } else if (o.type === 'whiteout') props.append(el('div', { class: 'help' }, 'Dekt de inhoud visueel af. De inhoud blijft wel in het bestand; gebruik Redigeren om ze echt te verwijderen.'));
+      props.append(el('div', { class: 'clip-row' },
+        el('button', { type: 'button', class: 'btn sm', id: 'p-copy', onclick: () => { copySel(null); if (o.text) { try { navigator.clipboard.writeText(o.text).catch(() => {}); } catch {} } toast(L('Gekopieerd — plak met Ctrl+V', 'Copied — paste with Ctrl+V')); } }, 'Kopiëren'),
+        el('button', { type: 'button', class: 'btn sm', id: 'p-dup', onclick: () => { const keep = CLIP; copySel(null); CLIP.n = 0; pasteClip(); CLIP = keep || CLIP; } }, 'Dupliceren'),
+        CLIP ? el('button', { type: 'button', class: 'btn sm', id: 'p-paste', onclick: () => pasteClip() }, 'Plakken') : null));
       props.append(el('button', { type: 'button', class: 'btn danger', id: 'p-delete', onclick: () => remove(o.id) }, icon('trash', 18, '#A3262A'), 'Verwijderen'));
       return;
     }
@@ -726,7 +693,7 @@ function page(app, { topbar, id }) {
         pg.textItems.forEach((it, k) => {
           if (!it.str.includes(term) || S.objs.some((o) => o.type === 'textedit' && o.page === pg.i && o.src === k)) return;
           const col = pg.dpr ? sample(pg, it.x, it.top, it.w, it.h) : { fg: '#000000', bg: '#ffffff' };
-          S.objs.push({ id: ++S.seq, type: 'textedit', page: pg.i, src: k, x: it.x, y: it.top, w: it.w, h: it.h, base: it.base - it.top, orig: it.str, text: it.str.split(term).join(r.value), size: +it.size.toFixed(2), fam: it.fam, bold: it.bold, italic: it.italic, color: col.fg, bg: col.bg, style0: { fam: it.fam, bold: it.bold, italic: it.italic, size: +it.size.toFixed(2), color: col.fg } });
+          S.objs.push({ id: ++S.seq, type: 'textedit', rot: it.rot || 0, page: pg.i, src: k, x: it.x, y: it.top, w: it.w, h: it.h, base: it.base - it.top, orig: it.str, text: it.str.split(term).join(r.value), size: +it.size.toFixed(2), fam: it.fam, bold: it.bold, italic: it.italic, color: col.fg, bg: col.bg, style0: { fam: it.fam, bold: it.bold, italic: it.italic, size: +it.size.toFixed(2), color: col.fg } });
           n++;
         });
       }
@@ -795,7 +762,7 @@ function page(app, { topbar, id }) {
     const pg = S.pdf ? currentPage() : null; const z = document.getElementById('zoom-lbl'); if (z) z.textContent = Math.round(S.scale * 100) + '%';
     status.replaceChildren(el('span', null, 'Gereedschap: ' + ((TABS.flatMap((t) => t.tools).find((t) => t[0] === S.tool) || [, ''])[1])),
       el('span', null, S.pdf ? `Pagina ${pg ? pg.i : 1} / ${S.pdf.numPages} · ${S.objs.length} wijziging(en)${S.dirty ? ' · niet opgeslagen' : ''}` : 'Geen bestand'),
-      el('span', null, 'Lokaal verwerkt — niets verlaat uw computer'));
+      el('span', null, 'Lokaal verwerkt — niets verlaat uw toestel'));
     undoBtn.disabled = !S.hist.length; redoBtn.disabled = !S.fut.length; saveBtn.disabled = !S.pdf;
     thumbs.querySelectorAll('.ed-th').forEach((t) => t.classList.toggle('cur', pg && +t.dataset.page === pg.i));
   }
@@ -807,12 +774,61 @@ function page(app, { topbar, id }) {
     const inField = e.target.closest('input,textarea,select,[contenteditable]');
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !inField) { e.preventDefault(); redo(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !inField && S.sel) { e.preventDefault(); const keep = CLIP; if (copySel(null)) { CLIP.n = 0; pasteClip(); } CLIP = keep || CLIP; }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel && !inField) { e.preventDefault(); remove(S.sel); }
     else if (S.mdraft && e.key === 'Enter') { e.preventDefault(); finishPoly(); }
     else if (S.mdraft && e.key === 'Escape') { cancelPoly(); }
     else if (e.key === 'Escape' && !inField) { select(null); if (S.tool !== 'select') setTool('select'); }
   };
   addEventListener('keydown', onKey);
+  // ----- Kopiëren, knippen, plakken (Ctrl/Cmd + C, X, V, D) -----
+  const MARK = '⁣PDFSTUDIO⁣';
+  function copySel(e) {
+    const o = selObj(); if (!o) return false;
+    const assets = {}; if (o.asset && S.assets.has(o.asset)) assets[o.asset] = S.assets.get(o.asset);
+    const text = o.text || (o.type === 'link' ? o.url : '') || '';
+    CLIP = { objs: [JSON.parse(JSON.stringify(o))], assets, text, t: Date.now(), n: 0 };
+    if (e && e.clipboardData) { e.clipboardData.setData('text/plain', text || ' '); e.clipboardData.setData('text/html', `<span data-pdfstudio="${CLIP.t}">${text.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</span>`); e.preventDefault(); }
+    return true;
+  }
+  function pasteClip() {
+    if (!CLIP || !S.pdf) return false; CLIP.n++;
+    const pg = currentPage(); let last = null;
+    for (const src of CLIP.objs) {
+      const o = JSON.parse(JSON.stringify(src)); delete o.id;
+      // een bewerkte PDF-tekst wordt bij plakken een gewoon tekstvak met dezelfde opmaak
+      if (o.type === 'textedit') { Object.assign(o, { type: 'text', w: Math.max(o.w + 8, 40), h: Math.max(o.h, o.size * 1.25) }); for (const k of ['src', 'orig', 'base', 'bg', 'style0']) delete o[k]; }
+      if (o.asset && CLIP.assets[o.asset] && !S.assets.has(o.asset)) S.assets.set(o.asset, CLIP.assets[o.asset]);
+      const d = 12 * CLIP.n; const samePage = o.page === pg.i;
+      const shift = (dx, dy) => { o.x += dx; o.y += dy; if (o.pts) o.pts = o.pts.map(([a, b]) => [a + dx, b + dy]); if (o.line) o.line = [o.line[0] + dx, o.line[1] + dy, o.line[2] + dx, o.line[3] + dy]; };
+      if (!samePage) { o.page = pg.i; const mx = Math.max(0, pg.w - o.w - 10), my = Math.max(0, pg.h - o.h - 10); if (!o.rot) shift(Math.min(o.x, mx) - o.x, Math.min(o.y, my) - o.y); }
+      shift(d, d);
+      if (o.type === 'field' && o.name) o.name = uniqueName(o.name.replace(/_\d+$/, ''));
+      last = add(o);
+    }
+    if (last) select(last.id); return !!last;
+  }
+  function pasteText(text) {
+    const pg = currentPage(); const lines = text.replace(/\r/g, '').split('\n'); const longest = Math.max(...lines.map((l) => l.length));
+    const w = Math.min(pg.w * 0.8, Math.max(60, longest * 6.2)), h = Math.max(18, lines.length * 14.4 + 4);
+    const r = stage.getBoundingClientRect(), b = pg.el.getBoundingClientRect(); const cy = Math.min(pg.h - h - 10, Math.max(10, ((r.top + r.height / 2) - b.top) / S.scale - h / 2));
+    const o = add({ type: 'text', page: pg.i, x: Math.max(10, (pg.w - w) / 2), y: cy, w, h, text: text.replace(/\r/g, ''), size: 12, fam: 'Helvetica', bold: false, italic: false, color: '#000000' }); select(o.id);
+  }
+  const inFieldNow = () => { const a = document.activeElement; return a && a.closest && a.closest('input,textarea,select,[contenteditable]'); };
+  const onCopy = (e) => { if (!document.body.contains(stage)) { removeEventListener('copy', onCopy); return; } if (inFieldNow() || getSelection().toString()) return; if (copySel(e)) toast(L('Gekopieerd', 'Copied')); };
+  const onCut = (e) => { if (!document.body.contains(stage)) { removeEventListener('cut', onCut); return; } if (inFieldNow() || getSelection().toString()) return; const o = selObj(); if (o && copySel(e)) remove(o.id); };
+  const onPaste = (e) => {
+    if (!document.body.contains(stage)) { removeEventListener('paste', onPaste); return; }
+    if (inFieldNow() || !S.pdf) return;
+    const cd = e.clipboardData; const html = cd ? cd.getData('text/html') : ''; const txt = cd ? cd.getData('text/plain') : '';
+    const files = cd ? [...cd.files].filter((f) => /^image\/(png|jpe?g)/.test(f.type)) : [];
+    e.preventDefault();
+    if (CLIP && (html.includes(`data-pdfstudio="${CLIP.t}"`) || (!html && !files.length && txt === (CLIP.text || ' ')))) { pasteClip(); return; }
+    if (files.length) { const f = files[0]; f.arrayBuffer().then(async (ab) => { const bytes = new Uint8Array(ab); const bmp = await createImageBitmap(new Blob([bytes])); placeImage(bytes, /png/.test(f.type) ? 'png' : 'jpg', bmp.width, bmp.height, 220); }); return; }
+    if (txt && txt.trim()) { pasteText(txt); return; }
+    if (CLIP) pasteClip();
+  };
+  addEventListener('copy', onCopy); addEventListener('cut', onCut); addEventListener('paste', onPaste);
 
   /* ----- Opslaan ----- */
   async function save() {
@@ -835,7 +851,7 @@ function page(app, { topbar, id }) {
     finally { saveBtn.innerHTML = lbl; drawStatus(); }
   }
   async function singlePage(pn) {
-    const src = await (S._srcDoc || (S._srcDoc = loadPdf(S.file)));
+    const src = await libDoc();
     const d = await PDFLib.PDFDocument.create({ updateMetadata: false }); d.addPage((await d.copyPages(src, [pn - 1]))[0]);
     return d.save({ useObjectStreams: false });
   }
@@ -843,17 +859,22 @@ function page(app, { topbar, id }) {
     const doc = single ? await loadPdf({ bytes: single }) : await loadPdf(S.file); const pages0 = doc.getPages();
     const pages = single ? { [only - 1]: pages0[0] } : pages0; const fonts = {}; const ctx = doc.context; const docFonts = new Map();
     // tekst vervangen in de paginacode zelf (origineel lettertype, rest van de regel schuift mee)
-    const removed = new Set(); const overflow = []; const fontReport = new Map();
+    const removed = new Set(); const doneIds = new Set(); const overflow = []; const fontReport = new Map();
     const editPages = [...new Set(S.objs.filter((o) => o.type === 'textedit').map((o) => o.page))].filter((pn) => only == null || pn === only);
     for (const pn of editPages) {
       if (skip.has(pn)) continue; const pg = S.pages[pn - 1]; if (!pg.textItems) await loadText(pg);
-      const objs = S.objs.filter((o) => o.type === 'textedit' && o.page === pn && pg.textItems[o.src]);
-      const edits = objs.map((o) => ({ item: pg.textItems[o.src], text: o.text, style: { fam: o.fam, bold: o.bold, italic: o.italic, size: o.size, color: o.color }, style0: o.style0 || { fam: o.fam, bold: o.bold, italic: o.italic, size: o.size, color: o.color } }));
-      try {
-        const r = await rewritePage(doc, pages[pn - 1], edits, pg.vp.transform, docFonts);
-        if (r.ok) { removed.add(pn); r.reports.forEach((rp, k) => { if (objs[k]) fontReport.set(objs[k].id, rp); }); r.overflow.filter((x) => !x.info && objs[x.index]).forEach((x) => overflow.push({ id: objs[x.index].id, page: pn, mm: x.mm, overlap: !!x.overlap, lines: x.lines || 0 })); }
-        else console.info('tekst-engine pagina ' + pn + ': ' + r.reason);
-      } catch (e) { console.warn('tekst-engine', e); }
+      const all = S.objs.filter((o) => o.type === 'textedit' && o.page === pn && pg.textItems[o.src]);
+      const byRot = new Map(); all.forEach((o) => { const r0 = pg.textItems[o.src].rot || 0; if (!byRot.has(r0)) byRot.set(r0, []); byRot.get(r0).push(o); });
+      let allOk = true; const groups = [...byRot.entries()];
+      for (const [k0, [r0, objs]] of groups.entries()) {
+        const edits = objs.map((o) => ({ item: pg.textItems[o.src], text: o.text, style: { fam: o.fam, bold: o.bold, italic: o.italic, size: o.size, color: o.color }, style0: o.style0 || { fam: o.fam, bold: o.bold, italic: o.italic, size: o.size, color: o.color } }));
+        try {
+          const r = await rewritePage(doc, pages[pn - 1], edits, frameT(pg, r0), docFonts, { compress: !single && k0 === groups.length - 1 });
+          if (r.ok) { objs.forEach((o) => doneIds.add(o.id)); r.reports.forEach((rp, k) => { if (objs[k]) fontReport.set(objs[k].id, rp); }); r.overflow.filter((x) => !x.info && objs[x.index]).forEach((x) => overflow.push({ id: objs[x.index].id, page: pn, mm: x.mm, overlap: !!x.overlap, lines: x.lines || 0 })); }
+          else { allOk = false; console.info('tekst-engine pagina ' + pn + ': ' + r.reason); }
+        } catch (e) { allOk = false; console.warn('tekst-engine', e); }
+      }
+      if (allOk && all.length) removed.add(pn);
     }
     const font = async (k) => fonts[k] || (fonts[k] = await doc.embedFont(StandardFonts[k]));
     // formulier
@@ -874,10 +895,11 @@ function page(app, { topbar, id }) {
       if (o.type === 'redact') continue;
       if (only != null && o.page !== only) continue;
       if (textOnly && o.type !== 'textedit') continue;
-      if (o.type === 'textedit' && removed.has(o.page)) continue; // al in de paginacode geplaatst
+      if (o.type === 'textedit' && doneIds.has(o.id)) continue; // al in de paginacode geplaatst
       const pg = S.pages[o.page - 1]; const page = pages[o.page - 1]; const vp = pg.vp; const r = ((page.getRotation().angle % 360) + 360) % 360;
-      const P = (x, y) => { const [px, py] = vp.convertToPdfPoint(x, y); return { x: px, y: py }; };
-      const rot = degrees(r);
+      const orot = (o.type === 'textedit' || o.type === 'text') && o.rot ? o.rot : 0;
+      const P = (x, y) => { const [vx, vy] = toView(orot, x, y); const [px, py] = vp.convertToPdfPoint(vx, vy); return { x: px, y: py }; };
+      const rot = degrees(r - orot * 180 / Math.PI);
       const bl = P(o.x, o.y + o.h);
       if (o.type === 'textedit' || o.type === 'text') {
         if (o.type === 'textedit') { const pad = Math.max(1, o.size * 0.12); const a = P(o.x - pad, o.y + o.h + pad); page.drawRectangle({ x: a.x, y: a.y, width: o.w + 2 * pad, height: o.h + 2 * pad, color: hexToRgb(o.bg), rotate: rot }); }
@@ -946,7 +968,7 @@ function page(app, { topbar, id }) {
         const a = P(o.x, o.y), b = P(o.x + o.w, o.y + o.h); const rect = [Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y)];
         let annot;
         if (o.type === 'link') { if (!o.url || o.url === 'https://') continue; annot = ctx.obj({ Type: 'Annot', Subtype: 'Link', Rect: rect, Border: [0, 0, 0], F: 4, A: { Type: 'Action', S: 'URI', URI: PDFString.of(o.url) } }); }
-        else annot = ctx.obj({ Type: 'Annot', Subtype: 'Text', Rect: rect, Contents: PDFHexString.fromText(o.text || ''), Name: 'Comment', C: [1, 0.85, 0.2], T: PDFHexString.fromText('ABN PDF Studio'), F: 4, Open: false });
+        else annot = ctx.obj({ Type: 'Annot', Subtype: 'Text', Rect: rect, Contents: PDFHexString.fromText(o.text || ''), Name: 'Comment', C: [1, 0.85, 0.2], T: PDFHexString.fromText('PDF Studio'), F: 4, Open: false });
         page.node.addAnnot(ctx.register(annot));
       }
     }
